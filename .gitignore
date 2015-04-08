@@ -1,1 +1,4 @@
 *.subl*
+out/*
+lib/*
+*.pdf

@@ -1,36 +1,76 @@
 IDIR=./hdr
-LDIR=/usr/local/lib
+LDIR=./lib
+ODIR=./obj
+BDIR=./bin
+SDIR=./src
 CC=g++
 CFLAGS=-I$(IDIR)
-ODIR=./obj
-BINDIR=./bin
-SDIR=./src
-LIBS=-lgsl -lgslcblas -lm
+LIBS=-lm
 
-_DEPS=spec_func.h
-      
-DEPS=$(patsubst %,$(IDIR)/%,$(_DEPS))
+TF_POT_DEPS=$(IDIR)/FTTFpotential.h \
+	  		$(IDIR)/ThermodynamicFunction.h 
+TFQE_POT_DEPS=
+TF_MOD_DEPS=
+TFQE_MOD_DEPS=
+TFS_MOD_DEPS=
+TF_EL_STATE_DEPS=
+TFQES_DEPS=
+Y_DEPS=$(IDIR)/Yfunction.h \
 
-_OBJ=main.o \
-     spec_func.o
+TF_POT_OBJ=$(ODIR)/FTTFpotential.o
+TFQE_POT_OBJ=$(ODIR)/FTTFQEpotential.o
+TF_MOD_OBJ=$(ODIR)/FTTFmodel.o
+TFQE_MOD_OBJ=$(ODIR)/FTTFQEmodel.o
+TFS_MOD_OBJ=$(ODIR)/FTTFSmodel.o
+TF_EL_STATE_OBJ=$(ODIR)/FTTFelectronicStates.o
+TFQES_OBJ=$(ODIR)/FTTFQESmodel.o
+Y_OBJ=$(ODIR)/Yfunction.o
 
-OBJ=$(patsubst %,$(ODIR)/%,$(_OBJ))
+objdir:
+	mkdir -p $(ODIR) 
 
-all: makeobjdir makebindir $(OBJ) TFCS
+bindir:
+	mkdir -p $(BDIR) 
 
-makeobjdir:
-	mkdir $(ODIR)
+$(ODIR)/%.o: $(SDIR)/%.cpp $(DEPS)
+	$(CC) -c -o $@ $< -I$(IDIR)
 
-makebindir:
-	mkdir $(BINDIR)
+FTTFpot: objdir bindir $(TF_POT_OBJ) 
+	$(CC) -o $(BDIR)/$@ $(TF_POT_OBJ) $(LIBS)
 
-$(ODIR)/%.o: $(SDIR)/%.cpp $(DEPS) 
-	$(CC) -c -o $@ $< $(CFLAGS)
+FTTFpot: DEPS=$(TF_POT_DEPS)
 
-TFCS: $(OBJ) 
-	$(CC) -o $(BINDIR)/$@ $^ $(LIBS)
+FTTFQEpot: objdir bindir $(TFQE_POT_OBJ) 
+	$(CC) -o $(BDIR)/$@ $(TFQE_POT_OBJ) $(LIBS)
+
+FTTFQEpot: DEPS=$(TFQE_POT_DEPS)	
+
+FTTFmodel: objdir bindir $(TF_MOD_OBJ) 
+	$(CC) -o $(BDIR)/$@ $(TF_MOD_OBJ) $(LIBS)
+
+FTTFmodel: DEPS=$(TF_MOD_DEPS)
+
+FTTFQEmodel: objdir bindir $(TFQE_MOD_OBJ) 
+	$(CC) -o $(BDIR)/$@ $(TFQE_MOD_OBJ) $(LIBS)
+
+FTTFQEmodel: DEPS=$(TFQE_MOD_DEPS)
+
+FTTFeStates: objdir bindir $(TF_EL_STATE_OBJ) 
+	$(CC) -o $(BDIR)/$@ $(TF_EL_STATE_OBJ) $(LIBS)
+
+FTTFeStates: DEPS=$(TF_EL_STATE_OBJ)
+
+FTTFQES: objdir bindir $(TFQES_MOD_OBJ) 
+	$(CC) -o $(BDIR)/$@ $(TFQES_MOD_OBJ) $(LIBS)
+
+FTTFQES: DEPS=$(TFQES_DEPS)
+
+Ytest: objdir bindir $(Y_OBJ) 
+	$(CC) -o $(BDIR)/$@ $(Y_OBJ) $(LIBS)
+
+Ytest: DEPS=$(Y_DEPS)
 
 .PHONY: clean
 
 clean:
-	rm -rf $(ODIR) *~ $(IDIR)/*~ $(SDIR)/*~ $(BINDIR)
+	rm -rf $(ODIR) *~ $(IDIR)/*~ $(SDIR)/*~ $(BDIR)
