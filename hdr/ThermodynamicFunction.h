@@ -2,6 +2,7 @@
 #include "../lib/numeric/hdr/numericTypes.h"
 #include "../lib/numeric/hdr/mathUtils.h"
 #include "../hdr/Units.h"
+#include <vector>
 /**
  * @brief This class provides interface for thermodynamic functions.
  * @details Contains value, unit and scale (linear or logarithmic) of the thermodynamic function. 
@@ -12,7 +13,7 @@ public:
     /**
     * @brief Constructor of the thermodynamic function.
     */
-    ThermodynamicFunction(Double value, Unit unit = Atomic, Scaling scale = lin) : instance(value, unit, scale) {};
+    ThermodynamicFunction(Double value = 0.0, Unit unit = Atomic, Scaling scale = lin) : instance(value, unit, scale) {};
     /**
     * @brief Set the value of the thermodynamic function.
     */
@@ -333,6 +334,16 @@ typedef ThermodynamicFunction<volume> Volume;
 typedef ThermodynamicFunction<density> Density;
 typedef ThermodynamicFunction<temperature> Temperature;
 typedef ThermodynamicFunction<concentration> Concentration;
+typedef ThermodynamicFunction<pressure> Pressure;
 typedef ThermodynamicFunction<energy> Energy;
 typedef ThermodynamicFunction<entropy> Entropy;
 typedef ThermodynamicFunction<chemicalPotential> ChemicalPotential;
+
+typedef std::vector<Volume> VolVec;
+typedef std::vector<Temperature> TempVec;
+typedef std::vector<Density> DensVec;
+typedef std::vector<Concentration> ConVec;
+typedef std::vector<Pressure> PressVec;
+typedef std::vector<Energy> EnergyVec;
+typedef std::vector<Entropy> EntropyVec;
+typedef std::vector<ChemicalPotential> ChemPotVec;
