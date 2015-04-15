@@ -85,13 +85,21 @@ public:
 	* @brief Print output data in file as defined in inputString.
 	*/
     void printOutput(const char* filename);
-    /**
-	* @brief Access operators to specific calculated quantity.
-	* @details FTTFmodel["P"] returns vector PressVec with pressure data, 
-	* where PressVec[v*pointsT + t] corresponds V = VolVec[v] and T = TempVec[t].
-	*/
-	template<class Vec>
-    Vec& operator[] (std::string parameter);
+
+	PressVec&   getP(); 
+	PressVec&   getPT();
+	PressVec&   getPC();
+	EnergyVec&  getE();
+	EnergyVec&  getET();
+	EnergyVec&  getEC();
+	EntropyVec& getS();
+	EntropyVec& getST();
+	EntropyVec& getSC();
+	ChemPotVec& getM();
+	ChemPotVec& getMT();
+	ChemPotVec& getMC();
+	EnergyVec&  getQEoS();
+	DoubleVec&  getTEoS();
     /**
 	* @brief Problem for calculating energy.
 	* @details The calculation goes through the solving of the ODE with parameters 
@@ -265,19 +273,21 @@ FTTFmodel::FTTFmodel(Double _Z, Double _Mass) :
 		T = NULL;    unitT = Atomic;    scaleT = lin;    needT = false;                         
 		V = NULL;    unitV = Atomic;    scaleV = lin;    needV = false;                         
 		D = NULL;    unitD = gOverCmc;  scaleD = lin;    needD = false;                         
-		C = NULL;    unitC = Atomic;    scaleC = lin;    needC = false;                         
-		P = NULL;    unitP = Atomic;    scaleP = lin;    needP = false;    calculatedP = false;    
+		C = NULL;    unitC = Atomic;    scaleC = lin;    needC = false;
+
+		P =  NULL;    unitP = Atomic;    scaleP = lin;    needP = false;    calculatedP = false;    
 		PT = NULL;   unitPT = Atomic;   scalePT = lin;   needPT = false;   calculatedPT = false;   
 		PC = NULL;   unitPC = Atomic;   scalePC = lin;   needPC = false;   calculatedPC = false;   
-		E = NULL;    unitE = Atomic;    scaleE = lin;    needE = false;    calculatedE = false;    
+		E =  NULL;    unitE = Atomic;    scaleE = lin;    needE = false;    calculatedE = false;    
 		ET = NULL;   unitET = Atomic;   scaleET = lin;   needET = false;   calculatedET = false;   
 		EC = NULL;   unitEC = Atomic;   scaleEC = lin;   needEC = false;   calculatedEC = false;   
-		S = NULL;    unitS = Atomic;    scaleS = lin;    needS = false;    calculatedS = false;    
+		S =  NULL;    unitS = Atomic;    scaleS = lin;    needS = false;    calculatedS = false;    
 		ST = NULL;   unitST = Atomic;   scaleST = lin;   needST = false;   calculatedST = false;   
 		SC = NULL;   unitSC = Atomic;   scaleSC = lin;   needSC = false;   calculatedSC = false;   
-		M = NULL;    unitM = Atomic;    scaleM = lin;    needM = false;    calculatedM = false;    
+		M =  NULL;    unitM = Atomic;    scaleM = lin;    needM = false;    calculatedM = false;    
 		MT = NULL;   unitMT = Atomic;   scaleMT = lin;   needMT = false;   calculatedMT = false;   
 		MC = NULL;   unitMC = Atomic;   scaleMC = lin;   needMC = false;   calculatedMC = false;   
+
 		QEoS = NULL; unitQEoS = Atomic; scaleQEoS = lin; needQEoS = false; calculatedQEoS = false; 
 		TEoS = NULL;									 needTEoS = false;
 	}
@@ -513,337 +523,10 @@ void FTTFmodel::printOutput(const char* filename) {
 	    }
     }
 }
-template<class Vec>
-Vec& FTTFmodel::operator[] (std::string parameter) {
-	if      (!parameter.compare("P"))	 { if (!calculatedP)    calculateP();    return *P; }
-	else if (!parameter.compare("PT"))   { if (!calculatedPT)   calculatePT();   return *PT; }
-	else if (!parameter.compare("PC"))   { if (!calculatedPC)   calculatePC();   return *PC; }
-	else if (!parameter.compare("E"))    { if (!calculatedE)    calculateE();    return *E; }
-	else if (!parameter.compare("ET"))   { if (!calculatedET)   calculateET();   return *ET; }
-	else if (!parameter.compare("EC"))   { if (!calculatedEC)   calculateEC();   return *EC; }
-	else if (!parameter.compare("S"))    { if (!calculatedS)    calculateS();    return *S; }
-	else if (!parameter.compare("ST"))   { if (!calculatedST)   calculateST();   return *ST; }
-	else if (!parameter.compare("SC"))   { if (!calculatedSC)   calculateSC();   return *SC; }
-	else if (!parameter.compare("M"))    { if (!calculatedM)    calculateM();    return *M; }
-	else if (!parameter.compare("MT"))   { if (!calculatedMT)   calculateMT();   return *MT; }
-	else if (!parameter.compare("MC"))   { if (!calculatedMC)   calculateMC();   return *MC; }
-	else if (!parameter.compare("QEoS")) { if (!calculatedQEoS) calculateQEoS(); return *QEoS; }
-	else if (!parameter.compare("TEoS")) { if (!calculatedTEoS) calculateTEoS(); return *TEoS; }
-	else {
-		std::cerr << "undefined parameter [" << parameter 
-		<< "] in FTTFmodel[]" << std::endl;
-		exit(0);
-	}
-}
-
-void FTTFmodel::calculateP() {
-	Int Vsize = V->size();
-	Int Tsize = T->size();
-	Int Psize = Vsize*Tsize;
-	P = new PressVec(Psize);
-	Double currentP;
-	for (Int v = 0; v < Vsize; ++v) {
-		for (Int t = 0; t < Tsize; ++t) {
-			phi.setParameters((*V)[v], (*T)[t]);
-			currentP = pow(2*(*T)[t](), 5.0/2.0)/6.0/M_PI/M_PI
-            *FD3half(phi.valueAt_1());
-			(*P)[v*Tsize + t].setValue(currentP);
-		}
-	}
-	calculatedP  = true;
-}
-void FTTFmodel::calculatePT() {
-	if (!calculatedP) calculateP();
-	if (!calculatedPC) calculatePC();
-	Int PTsize = P->size();
-	Int Vsize = V->size();
-	Int Tsize = T->size();
-	PT = new PressVec(PTsize);
-	Double currentPT;
-	for (Int v = 0; v < Vsize; ++v) {
-		for (Int t = 0; t < Tsize; ++t) {
-			currentPT = (*P)[v*Tsize + t]() - (*PC)[v]();
-			(*PT)[v*Tsize + t].setValue(currentPT);
-		}
-	}
-	calculatedPT = true;
-}
-void FTTFmodel::calculatePC() {
-	Int Vsize = V->size();
-	P = new PressVec(Vsize);
-	Double currentPC;
-	for (Int v = 0; v < Vsize; ++v) {
-		coldPhi.setParameters((*V)[v], coldT);
-		currentPC = pow(2*coldT(), 5.0/2.0)/6.0/M_PI/M_PI
-        *FD3half(coldPhi.valueAt_1());
-		(*PC)[v].setValue(currentPC);
-	}
-	calculatedPC = true;
-}
-void FTTFmodel::calculateE() {
-	Double currentE;
-    DoubleVec startE(0.0, rhsFTTFenergy::dim);
-    Double a, b;
-    Double V1, T1;
-    Double xFrom = 1.0;
-    Double xTo = 0.0;
-    Int Vsize = V->size();
-	Int Tsize = T->size();
-    E = new EnergyVec(Vsize*Tsize);
-
-	energySolver.SetOutput(energyData);
-	energySolver.SetTolerance(0.0, eps/10);
-
-    for (Int v = 0; v < Vsize; ++v) {
-    	for (Int t = 0; t < Tsize; ++t) {
-    		V1 = (*V)[v]()*Z;
-    		T1 = (*T)[t]()*pow(Z, -4.0/3.0);
-    		phi.setParameters((*V)[v], (*T)[t]);
-
-		    startE[0] = phi.valueAt_1();
-		    startE[1] = startE[0];
-		    startE[2] = 2.0*sqrt(2.0)*V1*pow(T1, 5.0/2.0)/M_PI/M_PI
-		                * FD3half(phi.valueAt_1()) + 0.76874512422;
-
-		    a =   pow(2.0, 7.0/6.0)
-		        * pow(3.0, 2.0/3.0)
-		        * pow(M_PI, -5.0/3.0)
-		        * sqrt(T1)*pow(V1, 2.0/3.0);
-		    b = 3.0*sqrt(2.0)*V1*pow(T1, 5.0/2.0)/M_PI/M_PI;
-			rhsEnergy.updateParameters(a, b);
-
-    		energySolver.Integrate(rhsEnergy, startE, xFrom, xTo);
-    		currentE = startE[2];
-    		(*E)[v*Tsize + t].setValue(currentE*pow(Z, 7.0/3.0));
-    	}
-    }
-	calculatedE  = true;
-}
-void FTTFmodel::calculateET() {
-	if (!calculatedE) calculateE();
-	if (!calculatedEC) calculateEC();
-	Int ETsize = E->size();
-	Int Vsize = V->size();
-	Int Tsize = T->size();
-	ET = new EnergyVec(ETsize);
-	Double currentET;
-	for (Int v = 0; v < Vsize; ++v) {
-		for (Int t = 0; t < Tsize; ++t) {
-			currentET = (*E)[v*Tsize + t]() - (*EC)[v]();
-			(*ET)[v*Tsize + t].setValue(currentET);
-		}
-	}
-	calculatedET = true;
-}
-void FTTFmodel::calculateEC() {
-	Double currentEC;
-	DoubleVec startE(0.0, rhsFTTFenergy::dim);
-	Double a, b;
-	Double V1, T1;
-	Double xFrom = 1.0;
-	Double xTo = 0.0;
-	Int Vsize = V->size();
-	EC = new EnergyVec(Vsize);
-
-	coldEnergySolver.SetOutput(coldEnergyData);
-	coldEnergySolver.SetTolerance(0.0, eps/10);
-
-	T1 = coldT()*pow(Z, -4.0/3.0);
-
-	for (Int v = 0; v < Vsize; ++v) {
-		V1 = (*V)[v]()*Z;
-		coldPhi.setParameters((*V)[v], coldT);
-
-		startE[0] = coldPhi.valueAt_1();
-		startE[1] = startE[0];
-		startE[2] = 2.0*sqrt(2.0)*V1*pow(T1, 5.0/2.0)/M_PI/M_PI
-	                * FD3half(coldPhi.valueAt_1()) + 0.76874512422;
-
-		a =   pow(2.0, 7.0/6.0)
-			* pow(3.0, 2.0/3.0)
-			* pow(M_PI, -5.0/3.0)
-			* sqrt(T1)*pow(V1, 2.0/3.0);
-		b = 3.0*sqrt(2.0)*V1*pow(T1, 5.0/2.0)/M_PI/M_PI;
-		rhsColdEnergy.updateParameters(a, b);
-
-		coldEnergySolver.Integrate(rhsColdEnergy, startE, xFrom, xTo);
-		currentEC = startE[2];
-		(*EC)[v].setValue(currentEC*pow(Z, 7.0/3.0));
-	}
-	calculatedEC = true;
-}
-void FTTFmodel::calculateS() {
-	Double currentS;
-    DoubleVec startS(0.0, rhsFTTFentropy::dim);
-    Double a, b;
-    Double V1, T1;
-    Double xFrom = 1.0;
-    Double xTo = 0.0;
-    Int Vsize = V->size();
-	Int Tsize = T->size();
-    S = new EntropyVec(Vsize*Tsize);
-
-	entropySolver.SetOutput(entropyData);
-	entropySolver.SetTolerance(0.0, eps/10);
-
-    for (Int v = 0; v < Vsize; ++v) {
-    	for (Int t = 0; t < Tsize; ++t) {
-    		V1 = (*V)[v]()*Z;
-    		T1 = (*T)[t]()*pow(Z, -4.0/3.0);
-    		phi.setParameters((*V)[v], (*T)[t]);
-
-    		startS[0] = phi.valueAt_1();
-		    startS[1] = startS[0];
-			startS[2] = 4.0*sqrt(2.0*T1)*V1*T1/M_PI/M_PI
-                * FD3half(phi.valueAt_1())
-                - phi.derivativeAt_0();
-
-		    a =   pow(2.0, 7.0/6.0)
-		        * pow(3.0, 2.0/3.0)
-		        * pow(M_PI, -5.0/3.0)
-		        * sqrt(T1)*pow(V1, 2.0/3.0);
-		    b = 7.0*sqrt(2.0*T1)*V1*T1/M_PI/M_PI;
-			rhsEntropy.updateParameters(a, b);
-
-    		entropySolver.Integrate(rhsEntropy, startS, xFrom, xTo);
-    		currentS = startS[2];
-    		(*S)[v*Tsize + t].setValue(currentS*Z);
-    	}
-    }
-	calculatedS  = true;
-}
-void FTTFmodel::calculateST() {
-	if (!calculatedS) calculateS();
-	if (!calculatedSC) calculateSC();
-	Int STsize = S->size();
-	Int Vsize = V->size();
-	Int Tsize = T->size();
-	ST = new EntropyVec(STsize);
-	Double currentST;
-	for (Int v = 0; v < Vsize; ++v) {
-		for (Int t = 0; t < Tsize; ++t) {
-			currentST = (*S)[v*Tsize + t]() - (*SC)[v]();
-			(*ST)[v*Tsize + t].setValue(currentST);
-		}
-	}
-	calculatedST = true;
-}
-void FTTFmodel::calculateSC() {
-	Double currentSC;
-	DoubleVec startS(0.0, rhsFTTFentropy::dim);
-	Double a, b;
-	Double V1, T1;
-	Double xFrom = 1.0;
-	Double xTo = 0.0;
-	Int Vsize = V->size();
-	SC = new EntropyVec(Vsize);
-
-	coldEntropySolver.SetOutput(coldEntropyData);
-	coldEntropySolver.SetTolerance(0.0, eps/10);
-
-	T1 = coldT()*pow(Z, -4.0/3.0);
-
-	for (Int v = 0; v < Vsize; ++v) {
-		V1 = (*V)[v]()*Z;
-		coldPhi.setParameters((*V)[v], coldT);
-
-		startS[0] = coldPhi.valueAt_1();
-	    startS[1] = startS[0];
-		startS[2] = 4.0*sqrt(2.0*T1)*V1*T1/M_PI/M_PI
-					* FD3half(coldPhi.valueAt_1())
-					- coldPhi.derivativeAt_0();
-
-		a =   pow(2.0, 7.0/6.0)
-		    * pow(3.0, 2.0/3.0)
-		    * pow(M_PI, -5.0/3.0)
-		    * sqrt(T1)*pow(V1, 2.0/3.0);
-		b = 7.0*sqrt(2.0*T1)*V1*T1/M_PI/M_PI;
-		rhsColdEntropy.updateParameters(a, b);
-
-		coldEntropySolver.Integrate(rhsColdEntropy, startS, xFrom, xTo);
-		currentSC = startS[2];
-		(*SC)[v].setValue(currentSC*Z);
-	}
-	calculatedSC = true;
-}
-void FTTFmodel::calculateM() {
-	Int Vsize = V->size();
-	Int Tsize = T->size();
-	Int Msize = Vsize*Tsize;
-	M = new ChemPotVec(Msize);
-	Double currentM;
-	for (Int v = 0; v < Vsize; ++v) {
-		for (Int t = 0; t < Tsize; ++t) {
-			phi.setParameters((*V)[v], (*T)[t]);
-			currentM = (*T)[t]()*phi.valueAt_1();
-			(*M)[v*Tsize + t].setValue(currentM);
-		}
-	}
-	calculatedM  = true;
-}
-void FTTFmodel::calculateMT() {
-	if (!calculatedM) calculateM();
-	if (!calculatedMC) calculateMC();
-	Int MTsize = M->size();
-	Int Vsize = V->size();
-	Int Tsize = T->size();
-	MT = new ChemPotVec(MTsize);
-	Double currentMT;
-	for (Int v = 0; v < Vsize; ++v) {
-		for (Int t = 0; t < Tsize; ++t) {
-			currentMT = (*M)[v*Tsize + t]() - (*MC)[v]();
-			(*MT)[v*Tsize + t].setValue(currentMT);
-		}
-	}
-	calculatedMT = true;
-}
-void FTTFmodel::calculateMC() {
-	Int Vsize = V->size();
-	MC = new ChemPotVec(Vsize);
-	Double currentMC;
-	for (Int v = 0; v < Vsize; ++v) {
-		coldPhi.setParameters((*V)[v], coldT);
-		currentMC = coldT()*coldPhi.valueAt_1();
-		(*MC)[v].setValue(currentMC);
-	}
-	calculatedMC = true;
-}
-void FTTFmodel::calculateQEoS() {
-	if (!calculatedE) calculateE();
-	if (!calculatedP) calculateP();
-	Int Qsize = E->size();
-	Int Vsize = V->size();
-	Int Tsize = T->size();
-	QEoS = new EnergyVec(Qsize);
-	Double currentQ;
-	for (Int v = 0; v < Vsize; ++v) {
-		for (Int t = 0; t < Tsize; ++t) {
-			currentQ = (*E)[v*Tsize + t]() - (*P)[v*Tsize + t]()*(*V)[v]();
-			(*QEoS)[v*Tsize + t].setValue(currentQ);
-		}
-	}
-	calculatedQEoS = true;
-}
-void FTTFmodel::calculateTEoS() {
-	if (!calculatedP) calculateP();
-	Int TEoSsize = P->size();
-	Int Vsize = V->size();
-	Int Tsize = T->size();
-	TEoS = new DoubleVec(TEoSsize);
-	Double currentTEoS;
-	for (Int v = 0; v < Vsize; ++v) {
-		for (Int t = 0; t < Tsize; ++t) {
-			currentTEoS = (*P)[v*Tsize + t]()*(*V)[v]()/(*T)[t]();
-			(*TEoS)[v*Tsize + t] = currentTEoS;
-		}
-	}
-	calculatedTEoS = true;
-}
 
 void FTTFmodel::calculateAll() {
 	Int Vsize = V->size();
 	Int Tsize = T->size();
-
     // generate necessary arrays
 	if ( needP) P = new PressVec(Vsize*Tsize);
 	if (needPT) {
@@ -894,17 +577,17 @@ void FTTFmodel::calculateAll() {
 
 	// calculate potential only one time per point
 	for (Int v = 0; v < Vsize; ++v) {
-		coldPhi.setParameters((*V)[v], coldT);
 		calculatedPC = false;
 		calculatedEC = false;
 		calculatedSC = false;
 		calculatedMC = false;
+		coldPhi.setParameters((*V)[v](), coldT(), Z);
 		if (needPC) calculatePC(v); 
 		if (needEC) calculateEC(v); 
 		if (needSC) calculateSC(v); 
 		if (needMC) calculateMC(v); 
 		for (Int t = 0; t < Tsize; ++t) {
-			phi.setParameters((*V)[v], (*T)[t]);
+			phi.setParameters((*V)[v](), (*T)[t](), Z);
 			calculatedP = false;
 			calculatedPT = false;
 			calculatedE = false;
@@ -928,6 +611,209 @@ void FTTFmodel::calculateAll() {
 		}
 	}
 }
+
+PressVec& FTTFmodel::getP()    { if (!calculatedP)  calculateP();  return *P; }
+PressVec& FTTFmodel::getPT()   { if (!calculatedPT) calculatePT(); return *PT; }
+PressVec& FTTFmodel::getPC()   { if (!calculatedPC) calculatePC(); return *PC; }
+
+EnergyVec& FTTFmodel::getE()   { if (!calculatedE)  calculateE();  return *E; }
+EnergyVec& FTTFmodel::getET()  { if (!calculatedET) calculateET(); return *ET; }
+EnergyVec& FTTFmodel::getEC()  { if (!calculatedEC) calculateEC(); return *EC; }
+
+EntropyVec& FTTFmodel::getS()  { if (!calculatedS)  calculateS();  return *S; }
+EntropyVec& FTTFmodel::getST() { if (!calculatedST) calculateST(); return *ST; }
+EntropyVec& FTTFmodel::getSC() { if (!calculatedSC) calculateSC(); return *SC; }
+
+ChemPotVec& FTTFmodel::getM()  { if (!calculatedM)  calculateM();  return *M; }
+ChemPotVec& FTTFmodel::getMT() { if (!calculatedMT) calculateMT(); return *MT; }
+ChemPotVec& FTTFmodel::getMC() { if (!calculatedMC) calculateMC(); return *MC; }
+
+void FTTFmodel::calculateP() {
+	Int Vsize = V->size();
+	Int Tsize = T->size();
+	Int Psize = Vsize*Tsize;
+	P = new PressVec(Psize);
+	for (Int v = 0; v < Vsize; ++v) {
+		for (Int t = 0; t < Tsize; ++t) {
+			phi.setParameters((*V)[v], (*T)[t], Z);
+			calculateP(v, t);
+		}
+	}
+	calculatedP  = true;
+}
+void FTTFmodel::calculatePT() {
+	if (!calculatedP) calculateP();
+	if (!calculatedPC) calculatePC();
+	Int PTsize = P->size();
+	Int Vsize = V->size();
+	Int Tsize = T->size();
+	PT = new PressVec(PTsize);
+	for (Int v = 0; v < Vsize; ++v) {
+		for (Int t = 0; t < Tsize; ++t) {
+			calculatePT(v, t);
+		}
+	}
+	calculatedPT = true;
+}
+void FTTFmodel::calculatePC() {
+	Int Vsize = V->size();
+	PC = new PressVec(Vsize);
+	for (Int v = 0; v < Vsize; ++v) {
+		coldPhi.setParameters((*V)[v], coldT, Z);
+		calculatePC(v);
+	}
+	calculatedPC = true;
+}
+void FTTFmodel::calculateE() {
+	Int Vsize = V->size();
+	Int Tsize = T->size();
+    E = new EnergyVec(Vsize*Tsize);
+
+	energySolver.SetOutput(energyData);
+	energySolver.SetTolerance(0.0, eps/10);
+
+    for (Int v = 0; v < Vsize; ++v) {
+    	for (Int t = 0; t < Tsize; ++t) {
+    		phi.setParameters((*V)[v], (*T)[t], Z);
+    		calculateE(v, t);
+    	}
+    }
+	calculatedE  = true;
+}
+void FTTFmodel::calculateET() {
+	if (!calculatedE) calculateE();
+	if (!calculatedEC) calculateEC();
+	Int ETsize = E->size();
+	Int Vsize = V->size();
+	Int Tsize = T->size();
+	ET = new EnergyVec(ETsize);
+	for (Int v = 0; v < Vsize; ++v) {
+		for (Int t = 0; t < Tsize; ++t) {
+			calculateET(v, t);
+		}
+	}
+	calculatedET = true;
+}
+void FTTFmodel::calculateEC() {
+	Int Vsize = V->size();
+	EC = new EnergyVec(Vsize);
+
+	coldEnergySolver.SetOutput(coldEnergyData);
+	coldEnergySolver.SetTolerance(0.0, eps/10);
+
+	for (Int v = 0; v < Vsize; ++v) {
+		coldPhi.setParameters((*V)[v], coldT, Z);
+		calculateEC(v);
+	}
+	calculatedEC = true;
+}
+void FTTFmodel::calculateS() {
+	Int Vsize = V->size();
+	Int Tsize = T->size();
+    S = new EntropyVec(Vsize*Tsize);
+
+	entropySolver.SetOutput(entropyData);
+	entropySolver.SetTolerance(0.0, eps/10);
+
+    for (Int v = 0; v < Vsize; ++v) {
+    	for (Int t = 0; t < Tsize; ++t) {
+    		phi.setParameters((*V)[v], (*T)[t], Z);
+    		calculateS(v, t);
+    	}
+    }
+	calculatedS  = true;
+}
+void FTTFmodel::calculateST() {
+	if (!calculatedS) calculateS();
+	if (!calculatedSC) calculateSC();
+	Int STsize = S->size();
+	Int Vsize = V->size();
+	Int Tsize = T->size();
+	ST = new EntropyVec(STsize);
+	for (Int v = 0; v < Vsize; ++v) {
+		for (Int t = 0; t < Tsize; ++t) {
+			calculateST(v, t);
+		}
+	}
+	calculatedST = true;
+}
+void FTTFmodel::calculateSC() {
+	Int Vsize = V->size();
+	SC = new EntropyVec(Vsize);
+
+	coldEntropySolver.SetOutput(coldEntropyData);
+	coldEntropySolver.SetTolerance(0.0, eps/10);
+
+	for (Int v = 0; v < Vsize; ++v) {
+		coldPhi.setParameters((*V)[v], coldT, Z);
+		calculateSC(v);
+	}
+	calculatedSC = true;
+}
+void FTTFmodel::calculateM() {
+	Int Vsize = V->size();
+	Int Tsize = T->size();
+	Int Msize = Vsize*Tsize;
+	M = new ChemPotVec(Msize);
+	for (Int v = 0; v < Vsize; ++v) {
+		for (Int t = 0; t < Tsize; ++t) {
+			phi.setParameters((*V)[v], (*T)[t], Z);
+			calculateM(v, t);
+		}
+	}
+	calculatedM  = true;
+}
+void FTTFmodel::calculateMT() {
+	if (!calculatedM) calculateM();
+	if (!calculatedMC) calculateMC();
+	Int MTsize = M->size();
+	Int Vsize = V->size();
+	Int Tsize = T->size();
+	MT = new ChemPotVec(MTsize);
+	for (Int v = 0; v < Vsize; ++v) {
+		for (Int t = 0; t < Tsize; ++t) {
+			calculateMT(v, t);
+		}
+	}
+	calculatedMT = true;
+}
+void FTTFmodel::calculateMC() {
+	Int Vsize = V->size();
+	MC = new ChemPotVec(Vsize);
+	for (Int v = 0; v < Vsize; ++v) {
+		coldPhi.setParameters((*V)[v], coldT, Z);
+		calculateMC(v);
+	}
+	calculatedMC = true;
+}
+void FTTFmodel::calculateQEoS() {
+	if (!calculatedE) calculateE();
+	if (!calculatedP) calculateP();
+	Int Qsize = E->size();
+	Int Vsize = V->size();
+	Int Tsize = T->size();
+	QEoS = new EnergyVec(Qsize);
+	for (Int v = 0; v < Vsize; ++v) {
+		for (Int t = 0; t < Tsize; ++t) {
+			calculateQEoS(v, t);
+		}
+	}
+	calculatedQEoS = true;
+}
+void FTTFmodel::calculateTEoS() {
+	if (!calculatedP) calculateP();
+	Int TEoSsize = P->size();
+	Int Vsize = V->size();
+	Int Tsize = T->size();
+	TEoS = new DoubleVec(TEoSsize);
+	for (Int v = 0; v < Vsize; ++v) {
+		for (Int t = 0; t < Tsize; ++t) {
+			calculateTEoS(v, t);
+		}
+	}
+	calculatedTEoS = true;
+}
+///////////////////////////////////////////////////////////////////////
 
 void FTTFmodel::calculateP(Int v, Int t) {
 	Double currentP;
@@ -964,7 +850,6 @@ void FTTFmodel::calculateE(Int v, Int t) {
 
 	V1 = (*V)[v]()*Z;
 	T1 = (*T)[t]()*pow(Z, -4.0/3.0);
-	phi.setParameters((*V)[v], (*T)[t]);
 
     startE[0] = phi.valueAt_1();
     startE[1] = startE[0];

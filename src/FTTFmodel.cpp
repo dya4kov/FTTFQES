@@ -19,7 +19,7 @@ int main() {
 	}
 	m.setParameters(D, T);
 	m.setTolerance(1e-7);
-	std::string input = "T[eV] P[GPa,lin] PT[GPa] PC[GPa] E ET EC M TEoS";
+	std::string input = "T[K] P[GPa,lin] E TEoS";
 	m.prepareOutput(input);
 	m.printOutput("out/FTTFmodel.dat");
 	return 0;

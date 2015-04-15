@@ -44,7 +44,7 @@ public:
 	/**
 	* @brief Set volume and temperature values for calculating correction to potential.
 	*/
-    void setParameters(const Volume& V, const Temperature &T);
+    void setParameters(const Volume& V, const Temperature &T, const Double Z);
 	/**
 	* @brief Set precision for calculating correction to potential.
 	*/
@@ -260,19 +260,23 @@ Double FTTFQEpotential::derivativeAt_0() {
     return calculatedData.ySave[3][lastPoint];
 }
 
-void FTTFQEpotential::setParameters(const Volume& V, const Temperature& T) {
-	if (abs(log10(V()) - log10(Vol)) > 1e-10
-        || abs(log10(T()) - log10(Temp)) > 1e-10) 
+void FTTFQEpotential::setParameters(const Volume& V, const Temperature& T, const Double Z) {
+    Volume V1;
+    Temperature T1;  
+    V1.setValue(V()*Z);
+    T1.setValue(T()*pow(Z, -4.0/3.0));
+	if (abs(log10(V1()) - log10(Vol)) > 1e-10
+        || abs(log10(T1()) - log10(Temp)) > 1e-10) 
     { 
         calculated = false;
-        Vol = V();
-        Temp = T();
+        Vol = V1();
+        Temp = T1();
         Double a =   pow(2.0, 7.0/6.0)
                    * pow(3.0, 2.0/3.0)
                    * pow(M_PI, -5.0/3.0)
                    * sqrt(Temp)*pow(Vol, 2.0/3.0);
         rhs.updateParameter(a);
-        TFpot.setParameters(V, T);
+        TFpot.setParameters(V, T, Z);
     }
 }
 
