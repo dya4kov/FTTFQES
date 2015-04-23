@@ -5,7 +5,7 @@
 
 int main() {
 	FTTFQEmodel m(1.0, 1.0);
-	Int Dsize = 1;
+	Int Dsize = 20;
 	Int Tsize = 20;
 
 	DensVec D(Dsize);
@@ -13,7 +13,7 @@ int main() {
 
 
 	for (Int d = 0; d < Dsize; ++d) {
-		D[d].setValue(3.0*(d + 1), gOverCmc);
+		D[d].setValue(0.1*(d + 1), gOverCmc);
 	}
 	for (Int t = 0; t < Tsize; ++t) {
 		T[t].setValue(1.0*(t + 1), eV);
