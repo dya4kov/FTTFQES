@@ -25,6 +25,8 @@ TFS_MOD_OBJ=$(ODIR)/FTTFSmodel.o
 TF_EL_STATE_OBJ=$(ODIR)/FTTFelectronicStates.o
 TFQES_OBJ=$(ODIR)/FTTFQESmodel.o
 Y_OBJ=$(ODIR)/Yfunction.o
+PRINT_OBJ=$(ODIR)/printer.o
+TIMER_OBJ=$(ODIR)/Timer.o
 
 objdir:
 	mkdir -p $(ODIR) 
@@ -69,6 +71,12 @@ Ytest: objdir bindir $(Y_OBJ)
 	$(CC) -o $(BDIR)/$@ $(Y_OBJ) $(LIBS)
 
 Ytest: DEPS=$(Y_DEPS)
+
+printTest: objdir bindir $(PRINT_OBJ) 
+	$(CC) -o $(BDIR)/$@ $(PRINT_OBJ) $(LIBS)
+
+timer: objdir bindir $(TIMER_OBJ) 
+	$(CC) -o $(BDIR)/$@ $(TIMER_OBJ) $(LIBS)
 
 .PHONY: clean
 
