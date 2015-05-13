@@ -3,6 +3,7 @@ LDIR=./lib
 ODIR=./obj
 BDIR=./bin
 SDIR=./src
+LOGDIR=./log
 CC=g++
 CFLAGS=-I$(IDIR)
 LIBS=-lm
@@ -27,6 +28,7 @@ TFQES_OBJ=$(ODIR)/FTTFQESmodel.o
 Y_OBJ=$(ODIR)/Yfunction.o
 PRINT_OBJ=$(ODIR)/printer.o
 TIMER_OBJ=$(ODIR)/Timer.o
+MAP_OBJ=$(ODIR)/mapTest.o
 
 objdir:
 	mkdir -p $(ODIR) 
@@ -34,35 +36,38 @@ objdir:
 bindir:
 	mkdir -p $(BDIR) 
 
+logdir:
+	mkdir -p $(LOGDIR)
+
 $(ODIR)/%.o: $(SDIR)/%.cpp $(DEPS)
 	$(CC) -c -o $@ $< -I$(IDIR)
 
-FTTFpot: objdir bindir $(TF_POT_OBJ) 
+FTTFpot: objdir bindir logdir $(TF_POT_OBJ) 
 	$(CC) -o $(BDIR)/$@ $(TF_POT_OBJ) $(LIBS)
 
 FTTFpot: DEPS=$(TF_POT_DEPS)
 
-FTTFQEpot: objdir bindir $(TFQE_POT_OBJ) 
+FTTFQEpot: objdir bindir logdir $(TFQE_POT_OBJ) 
 	$(CC) -o $(BDIR)/$@ $(TFQE_POT_OBJ) $(LIBS)
 
 FTTFQEpot: DEPS=$(TFQE_POT_DEPS)	
 
-FTTFmodel: objdir bindir $(TF_MOD_OBJ) 
+FTTFmodel: objdir bindir logdir $(TF_MOD_OBJ) 
 	$(CC) -o $(BDIR)/$@ $(TF_MOD_OBJ) $(LIBS)
 
 FTTFmodel: DEPS=$(TF_MOD_DEPS)
 
-FTTFQEmodel: objdir bindir $(TFQE_MOD_OBJ) 
+FTTFQEmodel: objdir bindir logdir $(TFQE_MOD_OBJ) 
 	$(CC) -o $(BDIR)/$@ $(TFQE_MOD_OBJ) $(LIBS)
 
 FTTFQEmodel: DEPS=$(TFQE_MOD_DEPS)
 
-FTTFeStates: objdir bindir $(TF_EL_STATE_OBJ) 
+FTTFeStates: objdir bindir logdir $(TF_EL_STATE_OBJ) 
 	$(CC) -o $(BDIR)/$@ $(TF_EL_STATE_OBJ) $(LIBS)
 
 FTTFeStates: DEPS=$(TF_EL_STATE_OBJ)
 
-FTTFQES: objdir bindir $(TFQES_MOD_OBJ) 
+FTTFQES: objdir bindir logdir $(TFQES_MOD_OBJ) 
 	$(CC) -o $(BDIR)/$@ $(TFQES_MOD_OBJ) $(LIBS)
 
 FTTFQES: DEPS=$(TFQES_DEPS)
@@ -78,7 +83,10 @@ printTest: objdir bindir $(PRINT_OBJ)
 timer: objdir bindir $(TIMER_OBJ) 
 	$(CC) -o $(BDIR)/$@ $(TIMER_OBJ) $(LIBS)
 
+mapTest: objdir bindir $(MAP_OBJ) 
+	$(CC) -o $(BDIR)/$@ $(MAP_OBJ) $(LIBS)
+
 .PHONY: clean
 
 clean:
-	rm -rf $(ODIR) *~ $(IDIR)/*~ $(SDIR)/*~ $(BDIR)
+	rm -rf $(ODIR) *~ $(IDIR)/*~ $(SDIR)/*~ $(BDIR) $(LOGDIR)

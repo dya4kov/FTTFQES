@@ -1,5 +1,6 @@
 #pragma once
 #include <fstream>
+#include <sstream>
 #include "../lib/numeric/hdr/ODE/ODEsolver.h"
 #include "../lib/numeric/hdr/ODE/ODEdata.h"
 #include "../lib/numeric/hdr/ODE/steppers/ODEstepperPD853.h"
@@ -21,7 +22,8 @@ public:
 	* and loads table of precalculated values of potential at
 	* @f$ x = 1 @f$.
 	*/
-    FTTFpotential(void);
+    FTTFpotential();
+    ~FTTFpotential();
     /**
     * @brief Value of potential @f$ \phi(x) @f$.
     * @return @f$ \phi(x) @f$
@@ -35,7 +37,7 @@ public:
 	/**
 	* @brief Set volume, temperature, and atomic number values for calculating potential.
 	*/
-    void setParameters(const Volume &V, const Temperature &T, const Double Z);
+    void setParameters(const PhysQ &V, const PhysQ &T, const Double Z);
 	/**
 	* @brief Set tolerance for calculating potential.
 	*/
@@ -61,21 +63,21 @@ public:
     */
     DoubleMat getData(const Int Npoints);
     /**
-    * @brief Turn on writing log file.
+    * @brief Write log to specified stream.
     */
-    void setLogOn();
+    void setLogStream(std::ofstream* _LOG);
     /**
-    * @brief Turn off writing log file.
+    * @brief Disable writing log to specified stream.
     */
-    void setLogOff();
+    void clearLogStream();
     /**
-    * @brief Get output log as string.
+    * @brief Enable self-printing log output into file.
     */
-    std::string getLogOutput();
+    void setPrintLogOn();
     /**
-    * @brief Print log output into file.
+    * @brief Disable self-printing log output into file.
     */
-    void printLogOutput();
+    void setPrintLogOff();
     /**
     * @brief Boundary problem for the Thomas-Fermi potential calculation
     * @details Thomas-Fermi potential is calculated from the following boundary problem:
@@ -106,7 +108,7 @@ private:
     void setPhiTable();
     void calculate();
     void setInitialShotParameters(Double& p1, Double& p2);
-    void prepareOut(Int Npoints);
+    void performOutput(Int Npoints);
 
     const Int vTableSize;
     const Int tTableSize;
@@ -132,13 +134,14 @@ private:
 
     Printer printer;
     Timer timer;
-    bool logOn;
-    std::stringstream LOG;
-    std::stringstream OUT;
+    bool printLogOn;
+    bool logStreamIsSet;
+    std::ofstream* LOG;
+    std::ofstream* OUT;
     DoubleMat data;
 };
 
-FTTFpotential::FTTFpotential(void) : 
+FTTFpotential::FTTFpotential() : 
                 vTableSize(200), 
                 tTableSize(175), 
                 lgV0(-9.9), 
@@ -156,19 +159,33 @@ FTTFpotential::FTTFpotential(void) :
     Temp = 0;
     precision = 6;
     eps = 1e-6;
-    logOn = false;
+    logStreamIsSet = false;
+    printLogOn = false;
+    OUT = NULL;
+    LOG = NULL;
+}
+
+FTTFpotential::~FTTFpotential() {
+    if (printLogOn) setPrintLogOff();
 }
 
 void FTTFpotential::setPhiTable() {
-    std::ifstream data("res/TFPotential.dat", std::ios::in);
+    std::ifstream datafile("res/TFPotential.dat", std::ios::in);
     Double currentValue;
     for (Int t = 0; t < tTableSize; ++t) {
         for (Int v = 0; v < vTableSize; ++v) {
-            data >> currentValue;
+            datafile >> currentValue;
             phiTable[v][t] = currentValue;
         }
     }
-    data.close();
+    datafile.close();
+}
+
+void FTTFpotential::clearLogStream() {
+    if (logStreamIsSet) {
+        LOG = NULL;
+        logStreamIsSet = false;
+    }
 }
 
 void FTTFpotential::setInitialShotParameters(Double& p1, Double& p2) {
@@ -241,8 +258,8 @@ void FTTFpotential::calculate() {
     Double averageTime;
     Int nStep = 0;
 
-    if (logOn) {
-        LOG << "Begin calculation using shooting method." << std::endl;
+    if (logStreamIsSet || printLogOn) {
+        (*LOG) << "Begin calculation using shooting method." << std::endl;
     }
 
     setInitialShotParameters(shotParameter_1, shotParameter_2);
@@ -251,32 +268,32 @@ void FTTFpotential::calculate() {
         shotParameter_2 = shotParameter_2 + 1e-2*abs(shotParameter_2);
     }
     
-    if (logOn) {
-        LOG << "Selected initial test values: " << std::endl;
-        printer.printString(LOG, "\\phi_1^{left} = ", 24, right);
-        printer.printSciDouble(LOG, shotParameter_1, precision, 15, left);
-        LOG << std::endl;
-        printer.printString(LOG, "\\phi_1^{right} = ", 24, right);
-        printer.printSciDouble(LOG, shotParameter_2, precision, 15, left);
-        LOG << std::endl;
-        LOG << "Begin shooting:" << std::endl;
-        printer.printString(LOG, "nStep",           10, left);
-        printer.printString(LOG, "\\phi_1^{left}",  20, left);
-        printer.printString(LOG, "\\phi_1^{right}", 20, left);
-        printer.printString(LOG, "\\phi_1^{test}",  20, left);
-        printer.printString(LOG, "\\phi_0^{test}",  20, left);
-        printer.printString(LOG, "error",           20, left);
-        printer.printString(LOG, "time[ms]",        20, left);
-        LOG << std::endl;
+    if (logStreamIsSet || printLogOn) {
+        (*LOG) << "Selected initial test values: " << std::endl;
+        printer.printString((*LOG), "\\phi_1^{left} = ", 24, right);
+        printer.printSciDouble((*LOG), shotParameter_1, precision, 15, left);
+        (*LOG) << std::endl;
+        printer.printString((*LOG), "\\phi_1^{right} = ", 24, right);
+        printer.printSciDouble((*LOG), shotParameter_2, precision, 15, left);
+        (*LOG) << std::endl;
+        (*LOG) << "Begin shooting:" << std::endl;
+        printer.printString((*LOG), "nStep",           10, left);
+        printer.printString((*LOG), "\\phi_1^{left}",  20, left);
+        printer.printString((*LOG), "\\phi_1^{right}", 20, left);
+        printer.printString((*LOG), "\\phi_1^{test}",  20, left);
+        printer.printString((*LOG), "\\phi_0^{test}",  20, left);
+        printer.printString((*LOG), "error",           20, left);
+        printer.printString((*LOG), "time[ms]",        20, left);
+        (*LOG) << std::endl;
     }
 
     error = abs(shotParameter_2 - shotParameter_1)/abs(shotParameter_1 + shotParameter_2);
     while (error > eps) {
-        if (logOn) { // write LOG
-            printer.printInt(LOG, nStep, 10, left);
-            printer.printSciDouble(LOG, shotParameter_1, precision, 20, left);
-            printer.printSciDouble(LOG, shotParameter_2, precision, 20, left);
-            printer.printSciDouble(LOG, 0.5*(shotParameter_1 + shotParameter_2), precision, 20, left);
+        if (logStreamIsSet || printLogOn) { // write (*LOG)
+            printer.printInt((*LOG), nStep, 10, left);
+            printer.printSciDouble((*LOG), shotParameter_1, precision, 20, left);
+            printer.printSciDouble((*LOG), shotParameter_2, precision, 20, left);
+            printer.printSciDouble((*LOG), 0.5*(shotParameter_1 + shotParameter_2), precision, 20, left);
             timer.start();
         }
 
@@ -287,14 +304,14 @@ void FTTFpotential::calculate() {
             shotParameter_2 -= (shotParameter_2 - shotParameter_1)/2;
         else shotParameter_1 += (shotParameter_2 - shotParameter_1)/2;
 
-        if (logOn) { // write LOG
+        if (logStreamIsSet || printLogOn) { // write (*LOG)
             timer.stop();
             timePerStep = timer.getElapsedTimeInMilliSec();
             timeSteps[nStep] = timePerStep;
-            printer.printSciDouble(LOG, phiCurrent[0], precision, 20, left);
-            printer.printSciDouble(LOG, error, precision, 20, left);
-            printer.printSciDouble(LOG, timePerStep, precision, 20, left);
-            LOG << std::endl;
+            printer.printSciDouble((*LOG), phiCurrent[0], precision, 20, left);
+            printer.printSciDouble((*LOG), error, precision, 20, left);
+            printer.printSciDouble((*LOG), timePerStep, precision, 20, left);
+            (*LOG) << std::endl;
             timer.reset();
             ++nStep;
         }
@@ -302,7 +319,7 @@ void FTTFpotential::calculate() {
         error = abs(shotParameter_2 - shotParameter_1)/abs(shotParameter_1 + shotParameter_2);
     }
     phi_1 = (shotParameter_1 + shotParameter_2)/2;
-    if (logOn) { // write last line in table, overall timing, and potential output
+    if (logStreamIsSet || printLogOn) { // write last line in table, overall timing, and potential output
         timer.start();
         phiCurrent[0] = phi_1;
         phiCurrent[1] = phi_1;
@@ -312,39 +329,39 @@ void FTTFpotential::calculate() {
         timer.stop();
         timePerStep = timer.getElapsedTimeInMilliSec();
         timeSteps[nStep] = timePerStep;
-        printer.printInt(LOG, nStep, 10, left);
-        printer.printSciDouble(LOG, shotParameter_1, precision, 20, left);
-        printer.printSciDouble(LOG, shotParameter_2, precision, 20, left);
-        printer.printSciDouble(LOG, 0.5*(shotParameter_1 + shotParameter_2), precision, 20, left);
-        printer.printSciDouble(LOG, phiCurrent[0], precision, 20, left);
-        printer.printSciDouble(LOG, error, precision, 20, left);
-        printer.printSciDouble(LOG, timePerStep, precision, 20, left);
-        LOG << std::endl;
-        LOG << "Finally selected \\phi_{1} = ";
-        printer.printSciDouble(LOG, phi_1, precision, 20, left);
-        LOG << std::endl;
+        printer.printInt((*LOG), nStep, 10, left);
+        printer.printSciDouble((*LOG), shotParameter_1, precision, 20, left);
+        printer.printSciDouble((*LOG), shotParameter_2, precision, 20, left);
+        printer.printSciDouble((*LOG), 0.5*(shotParameter_1 + shotParameter_2), precision, 20, left);
+        printer.printSciDouble((*LOG), phiCurrent[0], precision, 20, left);
+        printer.printSciDouble((*LOG), error, precision, 20, left);
+        printer.printSciDouble((*LOG), timePerStep, precision, 20, left);
+        (*LOG) << std::endl;
+        (*LOG) << "Finally selected \\phi_{1} = ";
+        printer.printSciDouble((*LOG), phi_1, precision, 20, left);
+        (*LOG) << std::endl;
         overallTime = 0.0;
         for (Int i = 0; i <= nStep; ++i) {
             overallTime += timeSteps[i];
         }
         averageTime = overallTime/(nStep + 1);
-        LOG << "Overall time = ";
-        printer.printSciDouble(LOG, overallTime, precision, 15, left);
-        LOG << " ms" << std::endl;
-        LOG << "Average time per step = ";
-        printer.printSciDouble(LOG, averageTime, precision, 15, left);
-        LOG << " ms" << std::endl;
-        LOG << "output steps for potential:" << std::endl;
+        (*LOG) << "Overall time = ";
+        printer.printSciDouble((*LOG), overallTime, precision, 15, left);
+        (*LOG) << " ms" << std::endl;
+        (*LOG) << "Average time per step = ";
+        printer.printSciDouble((*LOG), averageTime, precision, 15, left);
+        (*LOG) << " ms" << std::endl;
+        (*LOG) << "output steps for potential:" << std::endl;
         Int size = outData.Count();
-        printer.printString(LOG, "x");
-        printer.printString(LOG, "phi");
-        printer.printString(LOG, "dphi");
-        LOG << std::endl;
+        printer.printString((*LOG), "x");
+        printer.printString((*LOG), "phi");
+        printer.printString((*LOG), "dphi");
+        (*LOG) << std::endl;
         for (Int i = 0; i < size; ++i) {
-            printer.printSciDouble(LOG, outData.xSave[i], 6);
-            printer.printSciDouble(LOG, outData.ySave[0][i], 6);
-            printer.printSciDouble(LOG, outData.ySave[1][i], 6);
-            LOG << std::endl;
+            printer.printSciDouble((*LOG), outData.xSave[i], 6);
+            printer.printSciDouble((*LOG), outData.ySave[0][i], 6);
+            printer.printSciDouble((*LOG), outData.ySave[1][i], 6);
+            (*LOG) << std::endl;
         }
         solver.SetOutput(calculatedData);
     }
@@ -387,9 +404,9 @@ Double FTTFpotential::derivative(const Double x) {
     else return phi_1;
 }
 
-void FTTFpotential::setParameters(const Volume &V, const Temperature &T, const Double Z) {
-    Volume V1;
-    Temperature T1;  
+void FTTFpotential::setParameters(const PhysQ &V, const PhysQ &T, const Double Z) {
+    PhysQ V1;
+    PhysQ T1;  
     V1.setValue(V()*Z);
     T1.setValue(T()*pow(Z, -4.0/3.0));
     if (abs(log10(V1()) - log10(Vol)) > 1e-10
@@ -398,66 +415,80 @@ void FTTFpotential::setParameters(const Volume &V, const Temperature &T, const D
         calculated = false;
         Vol = V1();
         Temp = T1();
+
+        if (printLogOn) {
+            std::stringstream filename;
+            filename << "log/log_phi(V=" << Vol 
+                     << ", T=" << Temp << ")_";
+            filename << timer.getCurrentDatetime();
+            filename << ".txt";
+            if (LOG->is_open()) LOG->close();
+            LOG->open(filename.str().c_str(), std::ios::out);
+        }
+
         Double a =   pow(2.0, 7.0/6.0)
                    * pow(3.0, 2.0/3.0)
                    * pow(M_PI, -5.0/3.0)
                    * sqrt(Temp)*pow(Vol, 2.0/3.0);
         rhs.updateParameter(a);
         phi_0 = pow(4.0*M_PI/3.0/Vol, 1.0/3.0)/Temp;
-        if (logOn) { // write LOG
-            LOG << "FTTFpotential accepted new parameters:" << std::endl;
-            printer.printString(LOG, "V_{Z}[Atomic] = ", 22, right);
-            printer.printSciDouble(LOG, V(), precision, 15, left);
-            LOG << std::endl;
-            printer.printString(LOG, "T_{Z}[Hartree] = ", 23, right);
-            printer.printSciDouble(LOG, T(), precision, 15, left);
-            LOG << std::endl;
-            printer.printString(LOG, "Z = ", 10, right);
-            printer.printDouble(LOG, Z, 3, 15, left);
-            LOG << std::endl;
-            LOG << "Recalculate parameters:" << std::endl;
-            printer.printString(LOG, "V_{1}[Atomic] = V_{Z}*Z = ", 32, right);
-            printer.printSciDouble(LOG, Vol, precision, 15, left);
-            LOG << std::endl;
-            printer.printString(LOG, "T_{1}[Hartree] = T_{Z}*Z^{-4/3} = ", 40, right);
-            printer.printSciDouble(LOG, Temp, precision, 15, left);
-            LOG << std::endl;
-            printer.printString(LOG, "a = 2^{7/6}*3^{2/3}*\\pi^{-5/3}*T^{1/2}*V^{2/3} = ", 55, right);
-            printer.printSciDouble(LOG, a, precision, 15, left);
-            LOG << std::endl;
-            printer.printString(LOG, "\\phi_{0} = T^{-1}*(4*\\pi/(3V))^{1/3} = ", 45, right);
-            printer.printSciDouble(LOG, phi_0, precision, 15, left);
-            LOG << std::endl;
+        if (logStreamIsSet || printLogOn) { // write (*LOG)
+            (*LOG) << "FTTFpotential accepted new parameters:" << std::endl;
+            printer.printString((*LOG), "V_{Z}[Atomic] = ", 22, right);
+            printer.printSciDouble((*LOG), V(), precision, 15, left);
+            (*LOG) << std::endl;
+            printer.printString((*LOG), "T_{Z}[Hartree] = ", 23, right);
+            printer.printSciDouble((*LOG), T(), precision, 15, left);
+            (*LOG) << std::endl;
+            printer.printString((*LOG), "Z = ", 10, right);
+            printer.printDouble((*LOG), Z, 3, 15, left);
+            (*LOG) << std::endl;
+            (*LOG) << "Recalculate parameters:" << std::endl;
+            printer.printString((*LOG), "V_{1}[Atomic] = V_{Z}*Z = ", 32, right);
+            printer.printSciDouble((*LOG), Vol, precision, 15, left);
+            (*LOG) << std::endl;
+            printer.printString((*LOG), "T_{1}[Hartree] = T_{Z}*Z^{-4/3} = ", 40, right);
+            printer.printSciDouble((*LOG), Temp, precision, 15, left);
+            (*LOG) << std::endl;
+            printer.printString((*LOG), "a = 2^{7/6}*3^{2/3}*\\pi^{-5/3}*T^{1/2}*V^{2/3} = ", 55, right);
+            printer.printSciDouble((*LOG), a, precision, 15, left);
+            (*LOG) << std::endl;
+            printer.printString((*LOG), "\\phi_{0} = T^{-1}*(4*\\pi/(3V))^{1/3} = ", 45, right);
+            printer.printSciDouble((*LOG), phi_0, precision, 15, left);
+            (*LOG) << std::endl;
         }
     }
 }
 
 void FTTFpotential::printData(const char* filename) {
-    prepareOut(-1);
-    std::ofstream out;
-    out.open(filename, std::ios::out);
-    out << OUT.str();
+    OUT = new std::ofstream;
+    OUT->open(filename, std::ios::out);
+    performOutput(-1);
+    OUT->close();
+    delete OUT;
 }
 
 void FTTFpotential::printData(const char* filename, const Int Npoints) {
-    prepareOut(Npoints);
-    std::ofstream out;
-    out.open(filename, std::ios::out);
-    out << OUT.str();
+    OUT = new std::ofstream;
+    OUT->open(filename, std::ios::out);
+    performOutput(Npoints);
+    OUT->close();
+    delete OUT;
 }
 
 DoubleMat FTTFpotential::getData() {
-    prepareOut(-1);
+    performOutput(-1);
     return data;
 }
 
 DoubleMat FTTFpotential::getData(const Int Npoints) {
-    prepareOut(Npoints);
+    performOutput(Npoints);
     return data;
 }   
 
-void FTTFpotential::prepareOut(Int Npoints) {
+void FTTFpotential::performOutput(Int Npoints) {
     if (!calculated) calculate();
+    bool outIsSet = (OUT != NULL);
     // additional integration with saving steps
     Double xFrom = 1.0;
     Double xTo = 0.0;
@@ -470,15 +501,24 @@ void FTTFpotential::prepareOut(Int Npoints) {
     // write output data
     Int size = outData.Count();
     data = DoubleMat(0.0, rhsFTTFpotential::dim + 1, size);
-    printer.printString(OUT, "x");
-    printer.printString(OUT, "phi");
-    printer.printString(OUT, "dphi");
-    OUT << std::endl;
-    for (Int i = 0; i < size; ++i) {
-        printer.printSciDouble(OUT, data[0][i] = outData.xSave[i],    precision);
-        printer.printSciDouble(OUT, data[1][i] = outData.ySave[0][i], precision);
-        printer.printSciDouble(OUT, data[2][i] = outData.ySave[1][i], precision);
-        OUT << std::endl;
+    if (outIsSet) {
+        printer.printString((*OUT), "x");
+        printer.printString((*OUT), "phi");
+        printer.printString((*OUT), "dphi");
+        (*OUT) << std::endl;
+        for (Int i = 0; i < size; ++i) {
+            printer.printSciDouble((*OUT), data[0][i] = outData.xSave[i],    precision);
+            printer.printSciDouble((*OUT), data[1][i] = outData.ySave[0][i], precision);
+            printer.printSciDouble((*OUT), data[2][i] = outData.ySave[1][i], precision);
+            (*OUT) << std::endl;
+        }
+    }
+    else {
+        for (Int i = 0; i < size; ++i) {
+            data[0][i] = outData.xSave[i];
+            data[1][i] = outData.ySave[0][i];
+            data[2][i] = outData.ySave[1][i];
+        }
     }
     solver.SetOutput(calculatedData);
 }
@@ -486,33 +526,36 @@ void FTTFpotential::prepareOut(Int Npoints) {
 void FTTFpotential::setTolerance(Double _eps) {
 	eps = _eps;
     solver.SetTolerance(0.0, eps/10);
-    if (logOn) { // write LOG
-        LOG << "FTTFpotential accepted new tolerance:" << std::endl;
-        printer.printString(LOG, "eps = ", 12, right);
-        printer.printSciDouble(LOG, eps, precision, 15, left);
-        LOG << std::endl;
+    if (logStreamIsSet || printLogOn) { // write (*LOG)
+        (*LOG) << "FTTFpotential accepted new tolerance:" << std::endl;
+        printer.printString((*LOG), "eps = ", 12, right);
+        printer.printSciDouble((*LOG), eps, precision, 15, left);
+        (*LOG) << std::endl;
     }
     precision = static_cast<int>(-log10(eps));
     calculated = false;
 }
 
-void FTTFpotential::setLogOn() {
-    logOn = true;
+void FTTFpotential::setLogStream(std::ofstream* _LOG) {
+    if (printLogOn) setPrintLogOff();
+    LOG = _LOG;
+    logStreamIsSet = true;
 }
 
-void FTTFpotential::setLogOff() {
-    logOn = false;
+void FTTFpotential::setPrintLogOn() {
+    if (!logStreamIsSet) {
+        LOG = new std::ofstream;
+        printLogOn = true;
+    }
 }
 
-std::string FTTFpotential::getLogOutput() {
-    return LOG.str();
-}
-
-void FTTFpotential::printLogOutput() {
-    std::ofstream out;
-    std::string filename = "out/phi_log_";
-    filename += timer.getCurrentDatetime();
-    filename += ".txt";
-    out.open(filename.c_str(), std::ios::out);
-    out << LOG.str();
+void FTTFpotential::setPrintLogOff() {
+    if (!logStreamIsSet) {
+        if (printLogOn) {
+            printLogOn = false;
+            LOG->close();
+            delete LOG;
+            LOG = NULL;
+        }
+    }
 }

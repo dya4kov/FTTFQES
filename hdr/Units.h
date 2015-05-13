@@ -11,7 +11,6 @@ enum Unit {
     Pa,
     GPa,
     MBar,
-    gcc,
     gOverCmc,
     kgOverMc,
     oneOverCmc,
@@ -47,7 +46,7 @@ std::string unitToString(Unit unit) {
         case MBar :
             return s = "MBar";
         case gOverCmc :
-            return s = "g/cm^{3}";
+            return s = "g/cm^3";
         case kgOverMc :
             return s = "kg/m^{3}";
         case oneOverCmc :
@@ -69,7 +68,7 @@ Unit stringToUnit(std::string unit) {
     if (!unit.compare("Pa")) return Pa;
     if (!unit.compare("GPa")) return GPa;
     if (!unit.compare("MBar")) return MBar;
-    if (!unit.compare("g/cm^{3}")) return gcc;
+    if (!unit.compare("g/cm^3")) return gOverCmc;
     if (!unit.compare("kg/m^{3}")) return kgOverMc;
     if (!unit.compare("cm^{-3}")) return oneOverCmc;
     if (!unit.compare("m^{-3}")) return oneOverMc;
@@ -91,4 +90,12 @@ std::string scaleToString(Scaling scale) {
     }
 }
 
-const double Avogadro = 6.02214129e+23;
+const double Avogadro = 6.02214129e+23;          // [mol^{-1}]
+const double eMass = 9.10938291e-28;             // [g]
+const double rBohr = 5.2917720859e-11;           // [m]
+const double aVol = rBohr*rBohr*rBohr;           // [m^3]
+const double Ehartree = 27.2113845;              // [eV]
+const double kBoltzmann = 8.6173324e-5/Ehartree; // [hartree*K^{-1}]
+const double qElectron = 1.60217657e-19;         // [C] coulomb
+const double aPress = Ehartree*qElectron/aVol;   // [Pa]
+const double aDens = eMass/(aVol*1e+6);          // [g*cm^{-3}]
