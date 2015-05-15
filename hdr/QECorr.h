@@ -7,7 +7,7 @@
 #include "../lib/numeric/hdr/SF/FermiDirac.h"
 #include "../hdr/ThermodynamicFunction.h"
 #include "../hdr/FTTFpotential.h"
-#include "../hdr/Yfunction.h"
+#include "../hdr/FTTFQEpotential.h"
 #include "../hdr/Units.h"
 #include "../hdr/Timer.h"
 #include "../hdr/Printer.h"
@@ -44,13 +44,13 @@
 *	   \mu_T = \mu - \left.\mu\right|_{T = 0}.
 *	@f]
 */
-class FTTF {
+class QECorr {
 public:
 	/**
 	* @brief A constructor of Thomas-Fermi model.
 	*/
-    FTTF(Double _Z = 1.0, Double _Mass = 1.0);
-    ~FTTF();
+    QECorr(Double _Z = 1.0, Double _Mass = 1.0);
+    ~QECorr();
     /**
 	* @brief Set tolerance eps for the further calculations. Default is @f$ 10^{-6} @f$.
 	*/
@@ -120,79 +120,98 @@ public:
     PhysQvec& operator[] (std::string quantity);
     /**
 	* @brief Problem for calculating energy.
-	* @details The calculation goes through the solving of the ODE with parameters 
-	* @f$ a = 2^{7/6}3^{2/3}\pi^{-5/3}T^{1/2}V^{2/3} @f$,
-	* @f$ b = 3\sqrt{2}\pi^{-2}VT^{5/2} @f$,
-	* @f$ E_0 = -0.76874512422 @f$. Thomas-Fermi energy is solution of the ODE:
+	* @details The calculation goes through solving the ODE with parameters
+	* @f$ p_0 = 2^{7/6}3^{2/3}\pi^{-5/3}T^{1/2}V^{2/3} @f$,
+	* @f$ p_1 = \pi^{-3}VT^{2} @f$,
+	* @f$ \Delta E_0 = -0.269900170 @f$. Correction to Thomas-Fermi energy 
+	* is solution of the ODE:
 	* @f{eqnarray*}{
-	*  \frac{d^2\phi}{dx^2} &=& a x I_{1/2}
+	*  \frac{d^2\phi}{dx^2} &=& p_0 x I_{1/2}
 	*	  \left(
 	*		\frac{\phi(x)}{x}
 	*	  \right), \\
-	*  E'(x) &=& b x^2 I_{3/2}
-	*				\left(
-	*				  \frac{\phi(x)}{x}
-	*				\right), \\
+	*  \frac{d^2\psi}{dx^2} &=& p_0 \left[
+	*		       \frac12 \psi(x) I_{-1/2}\left(\frac{\phi(x)}{x}\right) + xY'(x)
+	*           \right], \\
+	*  \Delta E'(x) &=& -p_1 x \left[
+	*						\frac12 \psi(x) I_{1/2}\left(\frac{\phi(x)}{x}\right) + xY(x)
+	*					\right], \\
 	* \phi(1) &=& \phi'(1), \\
-	* E(1) &=& \frac{2\sqrt{2}VT^{5/2}}{\pi^2}I_{3/2}(\phi(1)) - E_0,
+	* \psi(1) &=& \psi'(1), \\
+	* \Delta E(1) &=& \frac{1}{3\pi}\sqrt{\frac{T}{2}}\psi'(0) - \Delta E_0,
 	* @f}
-	* Finally, @f$ E = E(0) @f$.
+	* Finally, @f$ \Delta E = \Delta E(0) @f$.
 	*/
-    struct rhsFTTFenergy {
+    struct rhsQECorrEnergy {
 		Double a;
 		Double b;
-		static const Int dim = 3;
+		static const Int dim = 4;
+		FermiDirac<Mhalf> FDmhalf;
 		FermiDirac<Half> FDhalf;
-		FermiDirac<ThreeHalf> FD3half;
-		rhsFTTFenergy(Double _a = 0, Double _b = 0) : a(_a), b(_b) {}
+		Yfunction Y;
+		rhsQECorrEnergy(Double _a = 0, Double _b = 0) : a(_a), b(_b) {}
 		void updateParameters(const Double _a, const Double _b) { a = _a; b = _b; }
 		void operator() (const Double x, DoubleVec &y, DoubleVec &dydx) {
-			dydx[0] = y[1];
+    		static Int sgn;
+    		dydx[0] = y[1];
+    		dydx[2] = y[3];
     		if (x > 0) {
-    			dydx[1] = a*x*FDhalf(y[0]/x);
-    			dydx[2] = b*FD3half(y[0]/x)*x*x;
+    		    dydx[1] = a*x*FDhalf(y[0]/x);
+    		    dydx[3] = a*(FDmhalf(y[0]/x)/2.0*y[2] + x*Y.derivative(y[0]/x));
+    		    dydx[4] = -b*x*(0.5*y[2]*FDhalf(y[0]/x) + x*Y(y[0]/x));
+    		    dydx[4] > 0 ? sgn = 1 : sgn = -1;
     		}
-    		else { 
-    			dydx[1] = dydx[2] = 1e+10;
+    		else {
+    		    dydx[1] = dydx[3] = 1e+10;
+    		    dydx[4] = sgn*1e+10;
     		}
 		}
 	};
 	/**
 	* @brief Problem for calculating entropy.
-	* @details The calculation goes through the solving of the ODE with parameters
-	* @f$ a = 2^{7/6}3^{2/3}\pi^{-5/3}T^{1/2}V^{2/3} @f$,
-	* @f$ b = 7\sqrt{2}\pi^{-2}VT^{3/2} @f$,
-	* Thomas-Fermi entropy is solution of the ODE:
+	* @details The calculation goes through solving the ODE with parameters
+	* @f$ p_0 = 2^{7/6}3^{2/3}\pi^{-5/3}T^{1/2}V^{2/3} @f$,
+	* @f$ p_1 = \pi^{-3}VT @f$.
+	* Correction to Thomas-Fermi entropy is solution of the ODE:
 	* @f{eqnarray*}{
-	*  \frac{d^2\phi}{dx^2} &=& a x I_{1/2}
+	*  \frac{d^2\phi}{dx^2} &=& p_0 x I_{1/2}
 	*	  \left(
 	*		\frac{\phi(x)}{x}
 	*	  \right), \\
-	*  S'(x) &=& b x^2 I_{3/2}
-	*				\left(
-	*				  \frac{\phi(x)}{x}
-	*				\right), \\
+	*  \frac{d^2\psi}{dx^2} &=& p_0 \left[
+	*		       \frac12 \psi(x) I_{-1/2}\left(\frac{\phi(x)}{x}\right) + xY'(x)
+	*           \right], \\
+	*  \Delta S'(x) &=& -p_1 x \left[
+	*						\frac12 \psi(x) I_{1/2}\left(\frac{\phi(x)}{x}\right) + 2xY(x)
+	*					\right], \\
 	* \phi(1) &=& \phi'(1), \\
-	* S(1) &=& \frac{4\sqrt{2}VT^{3/2}}{\pi^2}I_{3/2}(\phi(1)) - \phi'(0),
+	* \psi(1) &=& \psi'(1), \\
+	* \Delta S(1) &=& \frac{1}{3\pi\sqrt{2T}}\psi'(0),
 	* @f}
-	* Finally, @f$ S = S(0) @f$.
+	* Finally, @f$ \Delta S = \Delta S(0) @f$.
 	*/
-	struct rhsFTTFentropy {
+	struct rhsQECorrEntropy {
 		Double a;
 		Double b;
-		static const Int dim = 3;
+		static const Int dim = 4;
 		FermiDirac<Half> FDhalf;
-		FermiDirac<ThreeHalf> FD3half;
-		rhsFTTFentropy(Double _a = 0, Double _b = 0) : a(_a), b(_b) {}
+		FermiDirac<Mhalf> FDmhalf;
+		Yfunction Y;
+		rhsQECorrEntropy(Double _a = 0, Double _b = 0) : a(_a), b(_b) {}
 		void updateParameters(const Double _a, const Double _b) { a = _a; b = _b; }
 		void operator() (const Double x, DoubleVec &y, DoubleVec &dydx) {
-			dydx[0] = y[1];
+			static Int sgn;
+    		dydx[0] = y[1];
+    		dydx[2] = y[3];
     		if (x > 0) {
-    			dydx[1] = a*x*FDhalf(y[0]/x);
-    			dydx[2] = b*FD3half(y[0]/x)*x*x;
+    		    dydx[1] = a*x*FDhalf(y[0]/x);
+    		    dydx[3] = a*(FDmhalf(y[0]/x)/2.0*y[2] + x*Y.derivative(y[0]/x));
+    		    dydx[4] = -b*x*(0.5*y[2]*FDhalf(y[0]/x) + 2*x*Y(y[0]/x));
+    		    dydx[4] > 0 ? sgn = 1 : sgn = -1;
     		}
-    		else { 
-    			dydx[1] = dydx[2] = 1e+10;
+    		else {
+    		    dydx[1] = dydx[3] = 1e+10;
+    		    dydx[4] = sgn*1e+10;
     		}
 		}
 	};
@@ -214,39 +233,39 @@ private:
 	Int Vsize;
 	Int Tsize;
 	// calculate single point
-	void  calculate(std::string var, Int v, Int t);
-	void    calculateP(Int v, Int t); 
-	void   calculatePT(Int v, Int t); 
-	void   calculatePC(Int v); 
-	void    calculateE(Int v, Int t); 
-	void   calculateET(Int v, Int t); 
-	void   calculateEC(Int v); 
-	void    calculateS(Int v, Int t); 
-	void   calculateST(Int v, Int t); 
-	void   calculateSC(Int v); 
-	void    calculateM(Int v, Int t); 
-	void   calculateMT(Int v, Int t); 
-	void   calculateMC(Int v); 
+	void calculate(std::string var, Int v, Int t);
+	void  calculateDP(Int v, Int t); 
+	void calculateDPT(Int v, Int t); 
+	void calculateDPC(Int v); 
+	void  calculateDE(Int v, Int t); 
+	void calculateDET(Int v, Int t); 
+	void calculateDEC(Int v); 
+	void  calculateDS(Int v, Int t); 
+	void calculateDST(Int v, Int t); 
+	void calculateDSC(Int v); 
+	void  calculateDM(Int v, Int t); 
+	void calculateDMT(Int v, Int t); 
+	void calculateDMC(Int v); 
 
 	void calculateAll(); // uses fast calculation when prepare output
 	void performOutput();
 	void clearData();
 	
     // ode solvers
-    rhsFTTFenergy rhsEnergy;
-    ODEsolver<ODEstepperPD853<rhsFTTFenergy> > energySolver;
+    rhsQECorrEnergy rhsEnergy;
+    ODEsolver<ODEstepperPD853<rhsQECorrEnergy> > energySolver;
     ODEdata energyData;
 
-    rhsFTTFentropy rhsEntropy;
-    ODEsolver<ODEstepperPD853<rhsFTTFentropy> > entropySolver;
+    rhsQECorrEntropy rhsEntropy;
+    ODEsolver<ODEstepperPD853<rhsQECorrEntropy> > entropySolver;
     ODEdata entropyData;
 
-    rhsFTTFenergy rhsColdEnergy;
-    ODEsolver<ODEstepperPD853<rhsFTTFenergy> > coldEnergySolver;
+    rhsQECorrEnergy rhsColdEnergy;
+    ODEsolver<ODEstepperPD853<rhsQECorrEnergy> > coldEnergySolver;
     ODEdata coldEnergyData;
 
-    rhsFTTFentropy rhsColdEntropy;
-    ODEsolver<ODEstepperPD853<rhsFTTFentropy> > coldEntropySolver;
+    rhsQECorrEntropy rhsColdEntropy;
+    ODEsolver<ODEstepperPD853<rhsQECorrEntropy> > coldEntropySolver;
     ODEdata coldEntropyData;
 
     //transform quantities
@@ -256,10 +275,16 @@ private:
     void transformVtoC();
 
     FermiDirac<ThreeHalf> FD3half;
+    FermiDirac<Half> FDhalf;
+	FermiDirac<Mhalf> FDmhalf;
+	Yfunction Y;
     PhysQ coldT;
 
     FTTFpotential phi;
     FTTFpotential coldPhi;
+
+    FTTFQEpotential psi;
+    FTTFQEpotential coldPsi;
 
     // log and output
     Printer printer;
@@ -281,7 +306,7 @@ private:
 	bool showProgress;
 };
 
-FTTF::FTTF(Double _Z, Double _Mass) : 
+QECorr::QECorr(Double _Z, Double _Mass) : 
 	Z(_Z), Mass(_Mass), eps(1e-6),
 	energyData(-1), // save all steps
 	energySolver(1e-6, 0.0),
@@ -299,10 +324,10 @@ FTTF::FTTF(Double _Z, Double _Mass) :
 
 	varName[0] = "T"; varName[1] = "V"; varName[2] = "D"; varName[3] = "C";  
 	inputVarBound = 4; 
-	varName[4] = "PC"; varName[5] = "EC"; varName[6] = "SC"; varName[7] = "MC";
+	varName[4] = "DPC"; varName[5] = "DEC"; varName[6] = "DSC"; varName[7] = "DMC";
 	coldVarBound = 8;
-	varName[8] = "P"; varName[9] = "E"; varName[10] = "S"; varName[11] = "M";
-	varName[12] = "PT"; varName[13] = "ET"; varName[14] = "ST"; varName[15] = "MT";
+	varName[8] = "DP"; varName[9] = "DE"; varName[10] = "DS"; varName[11] = "DM";
+	varName[12] = "DPT"; varName[13] = "DET"; varName[14] = "DST"; varName[15] = "DMT";
 	
 	for (Int i = 0; i < varNum; ++i) {
 		data[varName[i]] = NULL;
@@ -329,83 +354,86 @@ FTTF::FTTF(Double _Z, Double _Mass) :
     showProgress = false;
 }
 
-FTTF::~FTTF() {
+QECorr::~QECorr() {
 	clearData();
 	setPrintMainLogOff();
 	setPrintPointLogOff();
 }
 
-void FTTF::calculate(std::string quantity, Int v = -1, Int t = -1) {
+void QECorr::calculate(std::string quantity, Int v = -1, Int t = -1) {
 	if (v < 0 && t < 0) {
 		calculateData(quantity);
 	}
 	if (v >= 0 && t < 0) {
-			 if (!quantity.compare("PC")) calculatePC(v);
-		else if (!quantity.compare("EC")) calculateEC(v);
-		else if (!quantity.compare("SC")) calculateSC(v);
-		else if (!quantity.compare("MC")) calculateMC(v);
+			 if (!quantity.compare("DPC")) calculateDPC(v);
+		else if (!quantity.compare("DEC")) calculateDEC(v);
+		else if (!quantity.compare("DSC")) calculateDSC(v);
+		else if (!quantity.compare("DMC")) calculateDMC(v);
 	}
 	if (v >= 0 && t >= 0) {
-			 if (!quantity.compare("P"))  calculateP(v, t);
-		else if (!quantity.compare("E"))  calculateE(v, t);
-		else if (!quantity.compare("S"))  calculateS(v, t);
-		else if (!quantity.compare("M"))  calculateM(v, t);
-		else if (!quantity.compare("PT")) calculatePT(v, t);
-		else if (!quantity.compare("ET")) calculateET(v, t);
-		else if (!quantity.compare("ST")) calculateST(v, t);
-		else if (!quantity.compare("MT")) calculateMT(v, t);
+			 if (!quantity.compare("DP"))  calculateDP(v, t);
+		else if (!quantity.compare("DE"))  calculateDE(v, t);
+		else if (!quantity.compare("DS"))  calculateDS(v, t);
+		else if (!quantity.compare("DM"))  calculateDM(v, t);
+		else if (!quantity.compare("DPT")) calculateDPT(v, t);
+		else if (!quantity.compare("DET")) calculateDET(v, t);
+		else if (!quantity.compare("DST")) calculateDST(v, t);
+		else if (!quantity.compare("DMT")) calculateDMT(v, t);
 	}
 }
 
-void FTTF::setTolerance(const Double _eps) { 
+void QECorr::setTolerance(const Double _eps) { 
 	eps = _eps;
 	precision = static_cast<int>(-log10(eps));
 	if (printMainLogOn || mainLogStreamIsSet) {
-		*mainLOG << "FTTF accepted new tolerance, eps = ";
+		*mainLOG << "QECorr accepted new tolerance, eps = ";
 		printer.printSciDouble(*mainLOG, eps, precision);
 		*mainLOG << std::endl;
-		phi.setLogStream(mainLOG);
-		coldPhi.setLogStream(mainLOG);
+		psi.setLogStream(mainLOG);
+		coldPsi.setLogStream(mainLOG);
 	}
 	phi.setTolerance(eps);
-	if (printMainLogOn || mainLogStreamIsSet) *mainLOG << "Cold ";
+	psi.setTolerance(eps);
+	if (printMainLogOn || mainLogStreamIsSet) 
+		*mainLOG << "Cold: " << std::endl;
 	coldPhi.setTolerance(eps);
+	coldPsi.setTolerance(eps);
 	energySolver.SetTolerance(0.0, eps/10);
 	coldEnergySolver.SetTolerance(0.0, eps/10);
 	entropySolver.SetTolerance(0.0, eps/10);
 	coldEntropySolver.SetTolerance(0.0, eps/10);
 	if (printMainLogOn || mainLogStreamIsSet) {
-		phi.clearLogStream();
-		coldPhi.clearLogStream();	
+		psi.clearLogStream();
+		coldPsi.clearLogStream();	
 	}
 }
 
-void FTTF::setMainLogStream(std::ofstream* _mainLOG) {
+void QECorr::setMainLogStream(std::ofstream* _mainLOG) {
     if (printMainLogOn) setPrintMainLogOff();
     mainLOG = _mainLOG;
     mainTimer.start();
     mainLogStreamIsSet = true;
 }
 
-void FTTF::setPrintMainLogOn() {
+void QECorr::setPrintMainLogOn() {
     if (!mainLogStreamIsSet) {
         mainLOG = new std::ofstream;
         mainTimer.start();
         std::stringstream filename;
-        filename << "log/log_FTTF_Z(";
+        filename << "log/log_QECorr_Z(";
         filename << Z << ")_M("; 
         filename << Mass << ")_";
         filename << mainTimer.getCurrentDatetime();
         filename << ".txt";
         mainLOG->open(filename.str().c_str(), std::ios::out);
-        *mainLOG << "FTTF log is started" << std::endl;
+        *mainLOG << "QECorr log is started" << std::endl;
         *mainLOG << "Z = " << Z << std::endl;
         *mainLOG << "Atomic Mass = " << Mass << std::endl;
         printMainLogOn = true;
     }
 }
 
-void FTTF::setPrintMainLogOff() {
+void QECorr::setPrintMainLogOff() {
     if (!mainLogStreamIsSet) {
         if (printMainLogOn) {
             printMainLogOn = false;
@@ -416,20 +444,20 @@ void FTTF::setPrintMainLogOff() {
     }
 }
 
-void FTTF::setPointLogStream(std::ofstream* _pointLOG) {
+void QECorr::setPointLogStream(std::ofstream* _pointLOG) {
     if (printPointLogOn) setPrintPointLogOff();
     pointLOG = _pointLOG;
     pointLogStreamIsSet = true;
 }
 
-void FTTF::setPrintPointLogOn() {
+void QECorr::setPrintPointLogOn() {
     if (!pointLogStreamIsSet) {
         pointLOG = new std::ofstream;
         printPointLogOn = true;
     }
 }
 
-void FTTF::setPrintPointLogOff() {
+void QECorr::setPrintPointLogOff() {
     if (!pointLogStreamIsSet) {
         if (printPointLogOn) {
             printPointLogOn = false;
@@ -440,22 +468,22 @@ void FTTF::setPrintPointLogOff() {
     }
 }
 
-void FTTF::setShowProgressOn() {
+void QECorr::setShowProgressOn() {
 	showProgress = true;
 }
 
-void FTTF::setShowProgressOff() {
+void QECorr::setShowProgressOff() {
 	showProgress = false;
 }
 
-void FTTF::clearData() {
+void QECorr::clearData() {
 	for (Int i = 0; i < varNum; ++i) {
 		if (data[varName[i]] != NULL) delete data[varName[i]];
 		if (i >= inputVarBound) { calculated[varName[i]] = false; }
 	}
 }
 
-void FTTF::setParameters(std::string volRange, std::string tempRange) {
+void QECorr::setParameters(std::string volRange, std::string tempRange) {
 	Double localTime = 0;
 	if (printMainLogOn || mainLogStreamIsSet) { 
 		localTime = mainTimer.getElapsedTimeInMilliSec();
@@ -551,7 +579,7 @@ void FTTF::setParameters(std::string volRange, std::string tempRange) {
 	}
 	/****************************LOG Section***************************/
 	if (printMainLogOn || mainLogStreamIsSet) {                       //
-		*mainLOG << "FTTF model accepts new parameters:" << std::endl;//
+		*mainLOG << "QECorr accepts new parameters:" << std::endl;//
 		if (isVolume) *mainLOG << "Volume: V[";                       //
 		if (isMdns) *mainLOG << "Mass density: D[";                   //
 		if (isVdns) *mainLOG << "Number density: C[";                 //
@@ -629,7 +657,7 @@ void FTTF::setParameters(std::string volRange, std::string tempRange) {
 	}
 }
 
-void FTTF::transformDtoV() {
+void QECorr::transformDtoV() {
 	PhysQvec* D = data["D"];
 	PhysQvec* V = new PhysQvec(Vsize);
 	Double currentV;
@@ -640,7 +668,7 @@ void FTTF::transformDtoV() {
 	data["V"] = V;
 }
 
-void FTTF::transformCtoV() {
+void QECorr::transformCtoV() {
 	PhysQvec* C = data["C"];
 	PhysQvec* V = new PhysQvec(Vsize);
 	Double currentV;
@@ -651,7 +679,7 @@ void FTTF::transformCtoV() {
 	data["V"] = V;
 }
 
-void FTTF::transformVtoD() {
+void QECorr::transformVtoD() {
 	PhysQvec* V = data["V"];
 	PhysQvec* D = new PhysQvec(Vsize);
 	Double currentD;
@@ -662,7 +690,7 @@ void FTTF::transformVtoD() {
 	data["D"] = D;
 }
 
-void FTTF::transformVtoC() {
+void QECorr::transformVtoC() {
 	PhysQvec* V = data["V"];
 	PhysQvec* C = new PhysQvec(Vsize);
 	Double currentC;
@@ -673,12 +701,12 @@ void FTTF::transformVtoC() {
 	data["C"] = C;
 }
 
-void FTTF::calculateData(std::string inputString) {
+void QECorr::calculateData(std::string inputString) {
 	Double localTime;
 	/****************************LOG Section*******************/
 	if (printMainLogOn || mainLogStreamIsSet) {               //
 		localTime = mainTimer.getElapsedTimeInMilliSec();     //
-		*mainLOG << "FTTF model accepts physical";            //
+		*mainLOG << "QECorr accepts physical";            //
 		*mainLOG << " quantities to calculate:" << std::endl; //
 	}                                                         //
 	/**********************************************************/
@@ -742,7 +770,7 @@ void FTTF::calculateData(std::string inputString) {
     calculateAll();
 }
 
-void FTTF::performOutput() {
+void QECorr::performOutput() {
 	Double dataToPrint;
 	for (Int i = 0; i < varNum; ++i) {
 		std::string s;
@@ -775,7 +803,7 @@ void FTTF::performOutput() {
 	}
 }
 
-void FTTF::printOutput(const char* filename) {
+void QECorr::printOutput(const char* filename) {
 	OUT = new std::ofstream;
     OUT->open(filename, std::ios::out);
 	performOutput();
@@ -783,11 +811,11 @@ void FTTF::printOutput(const char* filename) {
     delete OUT;
 }
 
-void FTTF::printOutput(std::string filename) {
+void QECorr::printOutput(std::string filename) {
 	printOutput(filename.c_str());
 }
 
-void FTTF::calculateAll() {
+void QECorr::calculateAll() {
 	Double localTime = 0;
 	Double pointTime = 0;
 	Int progress = 0;
@@ -808,10 +836,14 @@ void FTTF::calculateAll() {
 					20, left);                                       //
 			}                                                        //
 		}                                                            //
-		printer.printString(*mainLOG, "Phi(1)", 20, left);           //
-		printer.printString(*mainLOG, "DPhi(0)", 20, left);          //
-		printer.printString(*mainLOG, "coldPhi(1)", 20, left);       //
-		printer.printString(*mainLOG, "coldDPhi(0)", 20, left);      //
+		printer.printString(*mainLOG, "phi(1)", 20, left);           //
+		printer.printString(*mainLOG, "phi'(0)", 20, left);          //
+		printer.printString(*mainLOG, "phi_C(1)", 20, left);       //
+		printer.printString(*mainLOG, "phi'_C(0)", 20, left);      //
+		printer.printString(*mainLOG, "psi(1)", 20, left);           //
+		printer.printString(*mainLOG, "psi'(0)", 20, left);          //
+		printer.printString(*mainLOG, "psi_C(1)", 20, left);       //
+		printer.printString(*mainLOG, "psi'_C(0)", 20, left);      //
 		printer.printString(*mainLOG, "time[ms]", 20, left);         //
 		*mainLOG << std::endl;                                       //
 	}                                                                //
@@ -825,9 +857,9 @@ void FTTF::calculateAll() {
 		}                                                                              //
 		if (printPointLogOn) {                                                         //
             std::stringstream filename;                                                //
-            if (isLogVol)  filename << "log/log_FTTF(V=" << (*data["V"])[v]();         //
-        	if (isLogMdns) filename << "log/log_FTTF(D=" << (*data["D"])[v](gOverCmc); //
-    		if (isLogVdns) filename << "log/log_FTTF(C=" << (*data["C"])[v]();         //
+            if (isLogVol)  filename << "log/log_QECorr(V=" << (*data["V"])[v]();         //
+        	if (isLogMdns) filename << "log/log_QECorr(D=" << (*data["D"])[v](gOverCmc); //
+    		if (isLogVdns) filename << "log/log_QECorr(C=" << (*data["C"])[v]();         //
 			filename << ", T=" << (*data["T"])[0]() << ")_";                           //
             filename << pointTimer.getCurrentDatetime();                               //
             filename << ".txt";                                                        //
@@ -849,10 +881,11 @@ void FTTF::calculateAll() {
 			*pointLOG << "Temperature[Hartree,lin] = ";                                //
 			printer.printSciDouble(*pointLOG, (*data["T"])[0](), precision, 15, left); //
 			*pointLOG << std::endl;                                                    //
-			coldPhi.setLogStream(pointLOG);                                            //
+			coldPsi.setLogStream(pointLOG);                                            //
 		}                                                                              //
 		/*******************************************************************************/
 		coldPhi.setParameters((*(data["V"]))[v], coldT, Z);
+		coldPsi.setParameters((*(data["V"]))[v], coldT, Z);
 		for (Int i = inputVarBound; i < coldVarBound; ++i) {
 			calculated[varName[i]] = false;
 			if (need[varName[i]]) calculate(varName[i], v);
@@ -865,9 +898,9 @@ void FTTF::calculateAll() {
 			}                                                                              //
 			if (t > 0 && printPointLogOn) {                                                //
             	std::stringstream filename;                                                //
-            	if (isLogVol)  filename << "log/log_FTTF(V=" << (*data["V"])[v]();         //
-        		if (isLogMdns) filename << "log/log_FTTF(D=" << (*data["D"])[v](gOverCmc); //
-    			if (isLogVdns) filename << "log/log_FTTF(C=" << (*data["C"])[v]();         //
+            	if (isLogVol)  filename << "log/log_QECorr(V=" << (*data["V"])[v]();         //
+        		if (isLogMdns) filename << "log/log_QECorr(D=" << (*data["D"])[v](gOverCmc); //
+    			if (isLogVdns) filename << "log/log_QECorr(C=" << (*data["C"])[v]();         //
 				filename << ", T=" << (*data["T"])[t]() << ")_";                           //
             	filename << pointTimer.getCurrentDatetime();                               //
             	filename << ".txt";                                                        //
@@ -891,10 +924,11 @@ void FTTF::calculateAll() {
 				*pointLOG << std::endl;                                                    //
 			}                                                                              //
 			if (printPointLogOn || pointLogStreamIsSet) {                                  //
-				phi.setLogStream(pointLOG);                                                //
+				psi.setLogStream(pointLOG);                                                //
 			}                                                                              //
 			/*******************************************************************************/
 			phi.setParameters((*(data["V"]))[v], (*(data["T"]))[t], Z);
+			psi.setParameters((*(data["V"]))[v], (*(data["T"]))[t], Z);
 			for (Int i = coldVarBound; i < varNum; ++i) {                    
 				calculated[varName[i]] = false;
 				if (need[varName[i]]) calculate(varName[i], v, t);
@@ -909,7 +943,7 @@ void FTTF::calculateAll() {
 			}
 			/****************************LOG Section********************************************/
 			if (printPointLogOn || pointLogStreamIsSet) {                                      //
-				*pointLOG << "FTTF calculation for point is finished. Elapsed time: ";         //
+				*pointLOG << "QECorr calculation for point is finished. Elapsed time: ";         //
 				printer.printSciDouble(*pointLOG,                                              //
 					pointTimer.getElapsedTimeInMilliSec(),                                     //
 					precision, 15, left);                                                      //
@@ -943,6 +977,10 @@ void FTTF::calculateAll() {
 				printer.printSciDouble(*mainLOG, phi.derivative(0), precision, 20, left);      //
 				printer.printSciDouble(*mainLOG, coldPhi(1), precision, 20, left);             //
 				printer.printSciDouble(*mainLOG, coldPhi.derivative(0), precision, 20, left);  //
+				printer.printSciDouble(*mainLOG, psi(1), precision, 20, left);                 //
+				printer.printSciDouble(*mainLOG, psi.derivative(0), precision, 20, left);      //
+				printer.printSciDouble(*mainLOG, coldPsi(1), precision, 20, left);             //
+				printer.printSciDouble(*mainLOG, coldPsi.derivative(0), precision, 20, left);  //
 				printer.printSciDouble(*mainLOG, pointTime, 6, 20, left);                      //
 				*mainLOG << std::endl;                                                         //
 			}                                                                                  //
@@ -951,98 +989,107 @@ void FTTF::calculateAll() {
 	}
 }
 
-PhysQvec& FTTF::operator[] (std::string quantity) { 
+PhysQvec& QECorr::operator[] (std::string quantity) { 
 	if (!calculated[quantity]) calculate(quantity);
 	return *(data[quantity]);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-void FTTF::calculateP(Int v, Int t) {
+void QECorr::calculateDP(Int v, Int t) {
 	Double Ptime;
-	Double phi_1 = phi(1);
+	Double currentDP = FDhalf(phi(1));
+	Double psi_1 = psi(1);
 	if (printPointLogOn || pointLogStreamIsSet) {
 		Ptime = pointTimer.getElapsedTimeInMilliSec();
-		*pointLOG << "Calculating P:" << std::endl;
-		*pointLOG << "I_{3/2}(\\phi(1)) = ";
+		*pointLOG << "Calculating DP:" << std::endl;
+		*pointLOG << "I_{1/2}(\\phi(1)) = ";
 	}
-	Double currentP = FD3half(phi_1);;
+	Double currentY = Y(phi(1));
 	if (printPointLogOn || pointLogStreamIsSet) {
-		printer.printSciDouble(*pointLOG, currentP, precision, 20, left);
+		printer.printSciDouble(*pointLOG, currentDP, precision, 20, left);
 		*pointLOG << std::endl;
-		*pointLOG << "P_{TF} = (2T)^{5/2}/(6 \\pi^2)*I_{3/2}(\\phi(1)) = ";
+		*pointLOG << "Y(\\phi(1)) = ";
+		printer.printSciDouble(*pointLOG, currentDP, precision, 20, left);
+		*pointLOG << std::endl;
+		*pointLOG << "DP_{TF} = T^2/(3\\pi^3)*(I_{1/2}(\\phi(1))*\\psi(1) + Y(\\phi(1))) = ";
 	}
-	currentP = pow(2*(*(data["T"]))[t](), 5.0/2.0)/6.0/M_PI/M_PI*currentP;
-	(*(data["P"]))[v*Tsize + t].setValue(currentP);
-	calculated["P"] = true;
+	currentDP = pow((*(data["T"]))[t](), 2.0)/3.0/M_PI/M_PI/M_PI*(currentDP*psi_1 + currentY);
+	(*(data["DP"]))[v*Tsize + t].setValue(currentDP);
+	calculated["DP"] = true;
 	if (printPointLogOn || pointLogStreamIsSet) {
-		printer.printSciDouble(*pointLOG, currentP, precision, 20, left);
+		printer.printSciDouble(*pointLOG, currentDP, precision, 20, left);
 		*pointLOG << std::endl;
 		Ptime = pointTimer.getElapsedTimeInMilliSec() - Ptime;
 		*pointLOG << "Elapsed time = " << Ptime << " ms" << std::endl;
 	}
 }
-void FTTF::calculatePT(Int v, Int t) {
-	if (!calculated["P"])  calculateP(v, t);
-	if (!calculated["PC"]) calculatePC(v);
+void QECorr::calculateDPT(Int v, Int t) {
+	if (!calculated["DP"])  calculateDP(v, t);
+	if (!calculated["DPC"]) calculateDPC(v);
 	Double PTtime;
 	if (printPointLogOn || pointLogStreamIsSet) {
 		PTtime = pointTimer.getElapsedTimeInMilliSec();
-		*pointLOG << "Calculating PT:" << std::endl;
-		*pointLOG << "PT = P - PC = ";
+		*pointLOG << "Calculating DPT:" << std::endl;
+		*pointLOG << "DPT = DP - DPC = ";
 	}
-	Double currentPT;
-	currentPT = (*(data["P"]))[v*Tsize + t]() - (*(data["PC"]))[v]();	
-	(*(data["PT"]))[v*Tsize + t].setValue(currentPT);
-	calculated["PT"] = true;
+	Double currentDPT;
+	currentDPT = (*(data["DP"]))[v*Tsize + t]() - (*(data["DPC"]))[v]();	
+	(*(data["DPT"]))[v*Tsize + t].setValue(currentDPT);
+	calculated["DPT"] = true;
 	if (printPointLogOn || pointLogStreamIsSet) {
-		printer.printSciDouble(*pointLOG, currentPT, precision, 20, left);
+		printer.printSciDouble(*pointLOG, currentDPT, precision, 20, left);
 		*pointLOG << std::endl;
 		PTtime = pointTimer.getElapsedTimeInMilliSec() - PTtime;
 		*pointLOG << "Elapsed time = " << PTtime << " ms" << std::endl;
 	}
 }
-void FTTF::calculatePC(Int v) {
+void QECorr::calculateDPC(Int v) {
 	Double PCtime;
-	Double coldPhi_1 = coldPhi(1);
+	Double currentDPC = FDhalf(coldPhi(1));
+	Double coldPsi_1 = coldPsi(1);
 	if (printPointLogOn || pointLogStreamIsSet) {
 		PCtime = pointTimer.getElapsedTimeInMilliSec();
-		*pointLOG << "Calculating PC:" << std::endl;
+		*pointLOG << "Calculating DPC:" << std::endl;
 		*pointLOG << "T_{C}[Hartree] = ";
 		printer.printSciDouble(*pointLOG, coldT(), precision, 20, left);
 		*pointLOG << std::endl;
-		*pointLOG << "I_{3/2}(\\phi_{C}(1)) = ";
+		*pointLOG << "I_{1/2}(\\phi_{C}(1)) = ";
 	}
-	Double currentPC = FD3half(coldPhi_1);
+	Double currentY = Y(coldPhi(1));
 	if (printPointLogOn || pointLogStreamIsSet) {
-		printer.printSciDouble(*pointLOG, currentPC, precision, 20, left);
+		printer.printSciDouble(*pointLOG, currentDPC, precision, 20, left);
 		*pointLOG << std::endl;
-		*pointLOG << "PC_{TF} = (2T_{C})^{5/2}/(6 \\pi^2)*I_{3/2}(\\phi_{C}(1)) = ";
+		*pointLOG << "Y(\\phi_{C}(1)) = ";
+		printer.printSciDouble(*pointLOG, currentDPC, precision, 20, left);
+		*pointLOG << std::endl;
+		*pointLOG << "DPC_{TF} = T^2/(3\\pi^3)*(I_{1/2}(\\phi_{C}(1))*\\psi_{C}(1) + Y(\\phi_{C}(1))) = ";
 	}
-	currentPC = pow(2*coldT(), 5.0/2.0)/6.0/M_PI/M_PI*currentPC;
-	(*(data["PC"]))[v].setValue(currentPC);
-	calculated["PC"] = true;
+	currentDPC = pow(2*coldT(), 5.0/2.0)/6.0/M_PI/M_PI*currentDPC;
+	(*(data["DPC"]))[v].setValue(currentDPC);
+	calculated["DPC"] = true;
 	if (printPointLogOn || pointLogStreamIsSet) {
-		printer.printSciDouble(*pointLOG, currentPC, precision, 20, left);
+		printer.printSciDouble(*pointLOG, currentDPC, precision, 20, left);
 		*pointLOG << std::endl;
 		PCtime = pointTimer.getElapsedTimeInMilliSec() - PCtime;
 		*pointLOG << "Elapsed time = " << PCtime << " ms" << std::endl;
 	}
 }
-void FTTF::calculateE(Int v, Int t) {
-	static const Double E0 = 0.76874512422;
+void QECorr::calculateDE(Int v, Int t) {
+	static const Double DE0 = 0.269900170;
 	Double Etime;
-	Double currentE;
-    DoubleVec startE(0.0, rhsFTTFenergy::dim);
+	Double currentDE;
+    DoubleVec startDE(0.0, rhsQECorrEnergy::dim);
     Double a, b;
     Double V1, T1;
     Double xFrom = 1.0;
     Double xTo = 0.0;
     Double phi_1 = phi(1);
+    Double psi_1 = psi(1);
 
     if (printPointLogOn || pointLogStreamIsSet) {
 		Etime = pointTimer.getElapsedTimeInMilliSec();
-		*pointLOG << "Calculating E:" << std::endl;
+		*pointLOG << "Calculating DE:" << std::endl;
 		*pointLOG << "Transform parameters " << std::endl;
 	}
 
@@ -1053,67 +1100,78 @@ void FTTF::calculateE(Int v, Int t) {
         * pow(3.0, 2.0/3.0)
         * pow(M_PI, -5.0/3.0)
         * sqrt(T1)*pow(V1, 2.0/3.0);
-    b = 3.0*sqrt(2.0)*V1*pow(T1, 5.0/2.0)/M_PI/M_PI;
+    b = V1*pow(T1, 2.0)/M_PI/M_PI/M_PI;
 
 	if (printPointLogOn || pointLogStreamIsSet) {
 		*pointLOG << "V_1 = V_Z*Z = ";
 		printer.printSciDouble(*pointLOG, V1, precision, 20, left);
 		*pointLOG << std::endl << "T_1 = T_Z*Z^{-4/3}";
 		printer.printSciDouble(*pointLOG, T1, precision, 20, left);
-		*pointLOG << std::endl << "E_0 = 0.76874512422" << std::endl;
+		*pointLOG << std::endl << "DE_0 = 0.269900170" << std::endl;
 		*pointLOG << "a = 2^{7/6}*3^{2/3}*\\pi^{-5/3}*\\T_1^{1/2}*V_1^{2/3} = ";
 		printer.printSciDouble(*pointLOG, a, precision, 20, left);
-		*pointLOG << std::endl << "b = 3*2^{1/2}*V_1*T_1^{5/2}*\\pi^{-2} = ";
+		*pointLOG << std::endl << "b = V_1*T_1^2*\\pi^{3} = ";
 		printer.printSciDouble(*pointLOG, b, precision, 20, left);
 		*pointLOG << std::endl;
 	}
 
-    startE[0] = phi_1
-    startE[1] = phi_1;
-    startE[2] = 2.0*sqrt(2.0)*V1*pow(T1, 5.0/2.0)/M_PI/M_PI
-                * FD3half(phi_1) + E0;
+    startDE[0] = phi_1;
+	startDE[1] = phi_1;
+	startDE[2] = psi_1;
+    startDE[3] = psi_1;
+    startDE[4] = sqrt(0.5*T1)/3.0/M_PI*psi.derivative(0) + DE0;
 
     if (printPointLogOn || pointLogStreamIsSet) {
     	*pointLOG << "Initial vector for ODE" << std::endl;
-    	*pointLOG << "y_0(1) = \\phi(1)";
-    	printer.printSciDouble(*pointLOG, startE[0], precision, 20, left);
+    	*pointLOG << "y_0(1) = \\phi(1) = ";
+    	printer.printSciDouble(*pointLOG, startDE[0], precision, 20, left);
     	*pointLOG << std::endl;
-    	*pointLOG << "y_1(1) = \\phi(1)";
-    	printer.printSciDouble(*pointLOG, startE[1], precision, 20, left);
+    	*pointLOG << "y_1(1) = \\phi(1) = ";
+    	printer.printSciDouble(*pointLOG, startDE[1], precision, 20, left);
     	*pointLOG << std::endl;
-    	*pointLOG << "y_2(1) = 2^{3/2}*V_{1}*T_{1}^{5/2}*I_{3/2}(\\phi(1)) + E0 = ";
-    	printer.printSciDouble(*pointLOG, startE[2], precision, 20, left);
+    	*pointLOG << "y_2(1) = \\psi(1) = ";
+    	printer.printSciDouble(*pointLOG, startDE[2], precision, 20, left);
+    	*pointLOG << std::endl;
+    	*pointLOG << "y_3(1) = \\psi(1) = ";
+    	printer.printSciDouble(*pointLOG, startDE[3], precision, 20, left);
+    	*pointLOG << std::endl;
+    	*pointLOG << "y_4(1) = 2^{1/2}*3^{-1}*\\pi^{-1}*T_{1}^{1/2}*\\psi(1) + DE_0 = ";
+    	printer.printSciDouble(*pointLOG, startDE[4], precision, 20, left);
     	*pointLOG << std::endl;
     }
 
 	rhsEnergy.updateParameters(a, b);
-	energySolver.Integrate(rhsEnergy, startE, xFrom, xTo);
-	currentE = startE[2];
+	energySolver.Integrate(rhsEnergy, startDE, xFrom, xTo);
+	currentDE = startDE[4];
 
-	(*(data["E"]))[v*Tsize + t].setValue(currentE*pow(Z, 7.0/3.0));
+	(*(data["DE"]))[v*Tsize + t].setValue(currentDE*pow(Z, 5.0/3.0));
 
-	calculated["E"]  = true;
+	calculated["DE"]  = true;
 
 	if (printPointLogOn || pointLogStreamIsSet) {
 		Int size = energyData.Count();
         printer.printString((*pointLOG), "x");
         printer.printString((*pointLOG), "phi(x)");
         printer.printString((*pointLOG), "dphi(x)");
-        printer.printString((*pointLOG), "E(x)");
+        printer.printString((*pointLOG), "psi(x)");
+        printer.printString((*pointLOG), "dpsi(x)");
+        printer.printString((*pointLOG), "DE(x)");
         (*pointLOG) << std::endl;
         for (Int i = 0; i < size; ++i) {
             printer.printSciDouble((*pointLOG), energyData.xSave[i], precision);
             printer.printSciDouble((*pointLOG), energyData.ySave[0][i], precision);
             printer.printSciDouble((*pointLOG), energyData.ySave[1][i], precision);
             printer.printSciDouble((*pointLOG), energyData.ySave[2][i], precision);
+            printer.printSciDouble((*pointLOG), energyData.ySave[3][i], precision);
+            printer.printSciDouble((*pointLOG), energyData.ySave[4][i], precision);
             (*pointLOG) << std::endl;
         }
-        *pointLOG << "Calculated energy E_1 = E(0) = ";
-        printer.printSciDouble((*pointLOG), currentE, precision);
+        *pointLOG << "Calculated energy DE_1 = DE(0) = ";
+        printer.printSciDouble((*pointLOG), currentDE, precision);
         *pointLOG << std::endl;
 
-		*pointLOG << "Transform to E_Z = E_1*Z^{7/3} = ";
-		printer.printSciDouble((*pointLOG), currentE*pow(Z, 7.0/3.0), precision);
+		*pointLOG << "Transform to DE_Z = DE_1*Z^{5/3} = ";
+		printer.printSciDouble((*pointLOG), currentDE*pow(Z, 5.0/3.0), precision);
         *pointLOG << std::endl;
 
         Etime = pointTimer.getElapsedTimeInMilliSec() - Etime;
@@ -1121,40 +1179,41 @@ void FTTF::calculateE(Int v, Int t) {
     }
 
 }
-void FTTF::calculateET(Int v, Int t) {
-	if (!calculated["E"]) calculateE(v, t);
-	if (!calculated["EC"]) calculateEC(v);
+void QECorr::calculateDET(Int v, Int t) {
+	if (!calculated["DE"])  calculateDE(v, t);
+	if (!calculated["DEC"]) calculateDEC(v);
 	Double ETtime;
 	if (printPointLogOn || pointLogStreamIsSet) {
 		ETtime = pointTimer.getElapsedTimeInMilliSec();
-		*pointLOG << "Calculating ET:" << std::endl;
-		*pointLOG << "ET = E - EC = ";
+		*pointLOG << "Calculating DET:" << std::endl;
+		*pointLOG << "DET = DE - DEC = ";
 	}
-	Double currentET;
-	currentET = (*(data["E"]))[v*Tsize + t]() - (*(data["EC"]))[v]();
-	(*(data["ET"]))[v*Tsize + t].setValue(currentET);
-	calculated["ET"] = true;
+	Double currentDET;
+	currentDET = (*(data["DE"]))[v*Tsize + t]() - (*(data["DEC"]))[v]();
+	(*(data["DET"]))[v*Tsize + t].setValue(currentDET);
+	calculated["DET"] = true;
 	if (printPointLogOn || pointLogStreamIsSet) {
-		printer.printSciDouble(*pointLOG, currentET, precision, 20, left);
+		printer.printSciDouble(*pointLOG, currentDET, precision, 20, left);
 		*pointLOG << std::endl;
 		ETtime = pointTimer.getElapsedTimeInMilliSec() - ETtime;
 		*pointLOG << "Elapsed time = " << ETtime << " ms" << std::endl;
 	}
 }
-void FTTF::calculateEC(Int v) {
-	static const Double E0 = 0.76874512422;
+void QECorr::calculateDEC(Int v) {
+	static const Double DE0 = 0.269900170;
 	Double ECtime;
-	Double currentEC;
-	DoubleVec startEC(0.0, rhsFTTFenergy::dim);
+	Double currentDEC;
+	DoubleVec startDEC(0.0, rhsQECorrEnergy::dim);
 	Double a, b;
 	Double V1, T1;
 	Double xFrom = 1.0;
 	Double xTo = 0.0;
 	Double coldPhi_1 = coldPhi(1);
+	Double coldPsi_1 = coldPsi(1);
 
 	if (printPointLogOn || pointLogStreamIsSet) {
 		ECtime = pointTimer.getElapsedTimeInMilliSec();
-		*pointLOG << "Calculating EC:" << std::endl;
+		*pointLOG << "Calculating DEC:" << std::endl;
 		*pointLOG << "Transform parameters " << std::endl;
 	}
 	
@@ -1165,86 +1224,98 @@ void FTTF::calculateEC(Int v) {
 		* pow(3.0, 2.0/3.0)
 		* pow(M_PI, -5.0/3.0)
 		* sqrt(T1)*pow(V1, 2.0/3.0);
-	b = 3.0*sqrt(2.0)*V1*pow(T1, 5.0/2.0)/M_PI/M_PI;
+	b = V1*pow(T1, 2.0)/M_PI/M_PI/M_PI;
 
 	if (printPointLogOn || pointLogStreamIsSet) {
 		*pointLOG << "V_1 = V_Z*Z = ";
 		printer.printSciDouble(*pointLOG, V1, precision, 20, left);
 		*pointLOG << std::endl << "TC_1 = TC_Z*Z^{-4/3}";
 		printer.printSciDouble(*pointLOG, T1, precision, 20, left);
-		*pointLOG << std::endl << "E_0 = 0.76874512422" << std::endl;
+		*pointLOG << std::endl << "DE_0 = 0.269900170" << std::endl;
 		*pointLOG << "a = 2^{7/6}*3^{2/3}*\\pi^{-5/3}*\\TC_1^{1/2}*V_1^{2/3} = ";
 		printer.printSciDouble(*pointLOG, a, precision, 20, left);
-		*pointLOG << std::endl << "b = 3*2^{1/2}*V_1*TC_1^{5/2}*\\pi^{-2} = ";
+		*pointLOG << std::endl << "b = V_1*TC_1^2*\\pi^{3} = ";
 		printer.printSciDouble(*pointLOG, b, precision, 20, left);
 		*pointLOG << std::endl;
 	}
 
-	startEC[0] = coldPhi_1;
-	startEC[1] = coldPhi_1;
-	startEC[2] = 2.0*sqrt(2.0)*V1*pow(T1, 5.0/2.0)/M_PI/M_PI
-                * FD3half(coldPhi(1)) + E0;
+	startDEC[0] = coldPhi_1;
+	startDEC[1] = coldPhi_1;
+	startDEC[2] = coldPsi_1;
+    startDEC[3] = coldPsi_1;
+    startDEC[4] = sqrt(0.5*T1)/3.0/M_PI*coldPsi.derivative(0) + DE0;
 
     if (printPointLogOn || pointLogStreamIsSet) {
     	*pointLOG << "Initial vector for ODE" << std::endl;
-    	*pointLOG << "y_0(1) = \\phi_{C}(1)";
-    	printer.printSciDouble(*pointLOG, startEC[0], precision, 20, left);
+    	*pointLOG << "y_0(1) = \\phi_{C}(1) = ";
+    	printer.printSciDouble(*pointLOG, startDEC[0], precision, 20, left);
     	*pointLOG << std::endl;
-    	*pointLOG << "y_1(1) = \\phi_{C}(1)";
-    	printer.printSciDouble(*pointLOG, startEC[1], precision, 20, left);
+    	*pointLOG << "y_1(1) = \\phi_{C}(1) = ";
+    	printer.printSciDouble(*pointLOG, startDEC[1], precision, 20, left);
     	*pointLOG << std::endl;
-    	*pointLOG << "y_2(1) = 2^{3/2}*V_{1}*TC_{1}^{5/2}*I_{3/2}(\\phi(1)) + E0 = ";
-    	printer.printSciDouble(*pointLOG, startEC[2], precision, 20, left);
+    	*pointLOG << "y_2(1) = \\psi_{C}(1) = ";
+    	printer.printSciDouble(*pointLOG, startDEC[2], precision, 20, left);
+    	*pointLOG << std::endl;
+    	*pointLOG << "y_3(1) = \\psi_{C}(1) = ";
+    	printer.printSciDouble(*pointLOG, startDEC[3], precision, 20, left);
+    	*pointLOG << std::endl;
+    	*pointLOG << "y_4(1) = 2^{1/2}*3^{-1}*\\pi^{-1}*TC_{1}^{1/2}*\\psi_{C}(1) + DE_0 = ";
+    	printer.printSciDouble(*pointLOG, startDEC[4], precision, 20, left);
     	*pointLOG << std::endl;
     }
 
 	rhsColdEnergy.updateParameters(a, b);
 
-	coldEnergySolver.Integrate(rhsColdEnergy, startEC, xFrom, xTo);
-	currentEC = startEC[2];
-	(*(data["EC"]))[v].setValue(currentEC*pow(Z, 7.0/3.0));
+	coldEnergySolver.Integrate(rhsColdEnergy, startDEC, xFrom, xTo);
+	currentDEC = startDEC[4];
+	(*(data["DEC"]))[v].setValue(currentDEC*pow(Z, 5.0/3.0));
 
-	calculated["EC"] = true;
+	calculated["DEC"] = true;
 
 	if (printPointLogOn || pointLogStreamIsSet) {
 		Int size = coldEnergyData.Count();
         printer.printString((*pointLOG), "x");
         printer.printString((*pointLOG), "phi_{C}(x)");
         printer.printString((*pointLOG), "dphi_{C}(x)");
-        printer.printString((*pointLOG), "EC(x)");
+        printer.printString((*pointLOG), "psi_{C}(x)");
+        printer.printString((*pointLOG), "dpsi_{C}(x)");
+        printer.printString((*pointLOG), "DEC(x)");
         (*pointLOG) << std::endl;
         for (Int i = 0; i < size; ++i) {
             printer.printSciDouble((*pointLOG), coldEnergyData.xSave[i], precision);
             printer.printSciDouble((*pointLOG), coldEnergyData.ySave[0][i], precision);
             printer.printSciDouble((*pointLOG), coldEnergyData.ySave[1][i], precision);
             printer.printSciDouble((*pointLOG), coldEnergyData.ySave[2][i], precision);
+            printer.printSciDouble((*pointLOG), coldEnergyData.ySave[3][i], precision);
+            printer.printSciDouble((*pointLOG), coldEnergyData.ySave[4][i], precision);
             (*pointLOG) << std::endl;
         }
-        *pointLOG << "Calculated energy EC_1 = EC(0) = ";
-        printer.printSciDouble((*pointLOG), currentEC, precision);
+        *pointLOG << "Calculated energy DEC_1 = DEC(0) = ";
+        printer.printSciDouble((*pointLOG), currentDEC, precision);
         *pointLOG << std::endl;
 
-		*pointLOG << "Transform to EC_Z = EC_1*Z^{7/3} = ";
-		printer.printSciDouble((*pointLOG), currentEC*pow(Z, 7.0/3.0), precision);
+		*pointLOG << "Transform to DEC_Z = DEC_1*Z^{5/3} = ";
+		printer.printSciDouble((*pointLOG), currentDEC*pow(Z, 5.0/3.0), precision);
         *pointLOG << std::endl;
 
         ECtime = pointTimer.getElapsedTimeInMilliSec() - ECtime;
         *pointLOG << "Elapsed time = " << ECtime << " ms" << std::endl;
     }
 }
-void FTTF::calculateS(Int v, Int t) {
-	Double currentS;
+void QECorr::calculateDS(Int v, Int t) {
+	Double currentDS;
 	Double Stime;
-    DoubleVec startS(0.0, rhsFTTFentropy::dim);
+    DoubleVec startDS(0.0, rhsQECorrEntropy::dim);
     Double a, b;
     Double V1, T1;
     Double xFrom = 1.0;
     Double xTo = 0.0;
     Double phi_1 = phi(1);
+    Double psi_1 = psi(1);
 
     if (printPointLogOn || pointLogStreamIsSet) {
 		Stime = pointTimer.getElapsedTimeInMilliSec();
-		*pointLOG << "Calculating S:" << std::endl;
+		*pointLOG << "Calculating DS:" << std::endl;
 		*pointLOG << "Transform parameters " << std::endl;
 	}
 
@@ -1255,7 +1326,7 @@ void FTTF::calculateS(Int v, Int t) {
         * pow(3.0, 2.0/3.0)
         * pow(M_PI, -5.0/3.0)
         * sqrt(T1)*pow(V1, 2.0/3.0);
-    b = 7.0*sqrt(2.0*T1)*V1*T1/M_PI/M_PI;
+    b = T1*V1/M_PI/M_PI/M_PI;
 
 	if (printPointLogOn || pointLogStreamIsSet) {
 		*pointLOG << "V_1 = V_Z*Z = ";
@@ -1265,58 +1336,68 @@ void FTTF::calculateS(Int v, Int t) {
 		*pointLOG << std::endl;
 		*pointLOG << "a = 2^{7/6}*3^{2/3}*\\pi^{-5/3}*\\T_1^{1/2}*V_1^{2/3} = ";
 		printer.printSciDouble(*pointLOG, a, precision, 20, left);
-		*pointLOG << std::endl << "b = 3*2^{1/2}*V_1*T_1^{5/2}*\\pi^{-2} = ";
+		*pointLOG << std::endl << "b = V_1*T_1*\\pi^{-3} = ";
 		printer.printSciDouble(*pointLOG, b, precision, 20, left);
 		*pointLOG << std::endl;
 	}
 	
-	startS[0] = phi_1;
-    startS[1] = phi_1
-	startS[2] = 4.0*sqrt(2.0*T1)*V1*T1/M_PI/M_PI
-    		    * FD3half(phi_1)
-	            - phi.derivative(0);
+	startDS[0] = phi_1;
+	startDS[1] = phi_1;
+	startDS[2] = psi_1;
+	startDS[3] = psi_1;
+	startDS[4] = 1.0/(sqrt(2.0*T1)*3.0*M_PI)*psi.derivative(0);
 
 	if (printPointLogOn || pointLogStreamIsSet) {
     	*pointLOG << "Initial vector for ODE" << std::endl;
     	*pointLOG << "y_0(1) = \\phi(1)";
-    	printer.printSciDouble(*pointLOG, startS[0], precision, 20, left);
+    	printer.printSciDouble(*pointLOG, startDS[0], precision, 20, left);
     	*pointLOG << std::endl;
     	*pointLOG << "y_1(1) = \\phi(1)";
-    	printer.printSciDouble(*pointLOG, startS[1], precision, 20, left);
+    	printer.printSciDouble(*pointLOG, startDS[1], precision, 20, left);
     	*pointLOG << std::endl;
-    	*pointLOG << "y_2(1) = 4*2^{1/2}*V_{1}*T_{1}^{3/2}*I_{3/2}(\\phi(1)) - \\phi'(0) = ";
-    	printer.printSciDouble(*pointLOG, startS[2], precision, 20, left);
+    	*pointLOG << "y_2(1) = \\psi(1) = ";
+    	printer.printSciDouble(*pointLOG, startDS[2], precision, 20, left);
+    	*pointLOG << std::endl;
+    	*pointLOG << "y_3(1) = \\psi(1) = ";
+    	printer.printSciDouble(*pointLOG, startDS[3], precision, 20, left);
+    	*pointLOG << std::endl;
+    	*pointLOG << "y_4(1) = (3*\\pi*(2*T_1)^{1/2})^{-1}*psi'(1) = ";
+    	printer.printSciDouble(*pointLOG, startDS[4], precision, 20, left);
     	*pointLOG << std::endl;
     }
 
 	rhsEntropy.updateParameters(a, b);
 
-	entropySolver.Integrate(rhsEntropy, startS, xFrom, xTo);
-	currentS = startS[2];
-	(*(data["S"]))[v*Tsize + t].setValue(currentS*Z);
+	entropySolver.Integrate(rhsEntropy, startDS, xFrom, xTo);
+	currentDS = startDS[4];
+	(*(data["DS"]))[v*Tsize + t].setValue(currentDS*pow(Z, 1.0/3.0));
     	
-	calculated["S"]  = true;
+	calculated["DS"]  = true;
 
 	if (printPointLogOn || pointLogStreamIsSet) {
-		Int size = entropyData.Count();
+		Int size = energyData.Count();
         printer.printString((*pointLOG), "x");
         printer.printString((*pointLOG), "phi(x)");
         printer.printString((*pointLOG), "dphi(x)");
-        printer.printString((*pointLOG), "S(x)");
+        printer.printString((*pointLOG), "psi(x)");
+        printer.printString((*pointLOG), "dpsi(x)");
+        printer.printString((*pointLOG), "DS(x)");
         (*pointLOG) << std::endl;
         for (Int i = 0; i < size; ++i) {
             printer.printSciDouble((*pointLOG), entropyData.xSave[i], precision);
             printer.printSciDouble((*pointLOG), entropyData.ySave[0][i], precision);
             printer.printSciDouble((*pointLOG), entropyData.ySave[1][i], precision);
             printer.printSciDouble((*pointLOG), entropyData.ySave[2][i], precision);
+            printer.printSciDouble((*pointLOG), entropyData.ySave[3][i], precision);
+            printer.printSciDouble((*pointLOG), entropyData.ySave[4][i], precision);
             (*pointLOG) << std::endl;
         }
-        *pointLOG << "Calculated entropy S_1 = S(0) = ";
-        printer.printSciDouble((*pointLOG), currentS, precision);
+        *pointLOG << "Calculated entropy DS_1 = DS(0) = ";
+        printer.printSciDouble((*pointLOG), currentDS, precision);
         *pointLOG << std::endl;
 
-		*pointLOG << "Transform to S_Z = S_1*Z = ";
-		printer.printSciDouble((*pointLOG), currentS*Z, precision);
+		*pointLOG << "Transform to DS_Z = DS_1*Z^{1/3} = ";
+		printer.printSciDouble((*pointLOG), currentDS*pow(Z, 1.0/3.0), precision);
         *pointLOG << std::endl;
 
         Stime = pointTimer.getElapsedTimeInMilliSec() - Stime;
@@ -1324,40 +1405,41 @@ void FTTF::calculateS(Int v, Int t) {
     }
 
 }
-void FTTF::calculateST(Int v, Int t) {
-	if (!calculated["S"]) calculateS(v, t);
-	if (!calculated["SC"]) calculateSC(v);
+void QECorr::calculateDST(Int v, Int t) {
+	if (!calculated["DS"])  calculateDS(v, t);
+	if (!calculated["DSC"]) calculateDSC(v);
 	Double STtime;
 	if (printPointLogOn || pointLogStreamIsSet) {
 		STtime = pointTimer.getElapsedTimeInMilliSec();
-		*pointLOG << "Calculating ST:" << std::endl;
-		*pointLOG << "ST = S - SC = ";
+		*pointLOG << "Calculating DST:" << std::endl;
+		*pointLOG << "DST = DS - DSC = ";
 	}
-	Double currentST;
-	currentST = (*(data["S"]))[v*Tsize + t]() - (*(data["SC"]))[v]();
-	(*(data["ST"]))[v*Tsize + t].setValue(currentST);
+	Double currentDST;
+	currentDST = (*(data["DS"]))[v*Tsize + t]() - (*(data["DSC"]))[v]();
+	(*(data["DST"]))[v*Tsize + t].setValue(currentDST);
 	
-	calculated["ST"] = true;
+	calculated["DST"] = true;
 	if (printPointLogOn || pointLogStreamIsSet) {
-		printer.printSciDouble(*pointLOG, currentST, precision, 20, left);
+		printer.printSciDouble(*pointLOG, currentDST, precision, 20, left);
 		*pointLOG << std::endl;
 		STtime = pointTimer.getElapsedTimeInMilliSec() - STtime;
 		*pointLOG << "Elapsed time = " << STtime << " ms" << std::endl;
 	}
 }
-void FTTF::calculateSC(Int v) {
+void QECorr::calculateDSC(Int v) {
 	Double SCtime;
-	Double currentSC;
-	DoubleVec startSC(0.0, rhsFTTFentropy::dim);
+	Double currentDSC;
+	DoubleVec startDSC(0.0, rhsQECorrEntropy::dim);
 	Double a, b;
 	Double V1, T1;
 	Double xFrom = 1.0;
 	Double xTo = 0.0;
 	Double coldPhi_1 = coldPhi(1);
+	Double coldPsi_1 = coldPsi(1);
 
 	if (printPointLogOn || pointLogStreamIsSet) {
 		SCtime = pointTimer.getElapsedTimeInMilliSec();
-		*pointLOG << "Calculating SC:" << std::endl;
+		*pointLOG << "Calculating DSC:" << std::endl;
 		*pointLOG << "Transform parameters " << std::endl;
 	}
 	
@@ -1367,7 +1449,7 @@ void FTTF::calculateSC(Int v) {
 	    * pow(3.0, 2.0/3.0)
 	    * pow(M_PI, -5.0/3.0)
 	    * sqrt(T1)*pow(V1, 2.0/3.0);
-	b = 7.0*sqrt(2.0*T1)*V1*T1/M_PI/M_PI;
+	b = T1*V1/M_PI/M_PI/M_PI;
 	
 	if (printPointLogOn || pointLogStreamIsSet) {
 		*pointLOG << "V_1 = V_Z*Z = ";
@@ -1377,127 +1459,144 @@ void FTTF::calculateSC(Int v) {
 		*pointLOG << std::endl;
 		*pointLOG << "a = 2^{7/6}*3^{2/3}*\\pi^{-5/3}*\\TC_1^{1/2}*V_1^{2/3} = ";
 		printer.printSciDouble(*pointLOG, a, precision, 20, left);
-		*pointLOG << std::endl << "b = 3*2^{1/2}*V_1*TC_1^{5/2}*\\pi^{-2} = ";
+		*pointLOG << std::endl << "b = V_1*TC_1*\\pi^{-3} = ";
 		printer.printSciDouble(*pointLOG, b, precision, 20, left);
 		*pointLOG << std::endl;
 	}
 	
-	startSC[0] = coldPhi_1;
-	startSC[1] = coldPhi_1;
-	startSC[2] = 4.0*sqrt(2.0*T1)*V1*T1/M_PI/M_PI
-				* FD3half(coldPhi_1)
-				- coldPhi.derivative(0);
+	startDSC[0] = coldPhi_1;
+	startDSC[1] = coldPhi_1;
+	startDSC[2] = coldPsi_1;
+	startDSC[3] = coldPsi_1;
+	startDSC[4] = 1.0/(sqrt(2.0*T1)*3.0*M_PI)*coldPsi.derivative(0);
 
 	if (printPointLogOn || pointLogStreamIsSet) {
     	*pointLOG << "Initial vector for ODE" << std::endl;
     	*pointLOG << "y_0(1) = \\phi_{C}(1)";
-    	printer.printSciDouble(*pointLOG, startSC[0], precision, 20, left);
+    	printer.printSciDouble(*pointLOG, startDSC[0], precision, 20, left);
     	*pointLOG << std::endl;
     	*pointLOG << "y_1(1) = \\phi_{C}(1)";
-    	printer.printSciDouble(*pointLOG, startSC[1], precision, 20, left);
+    	printer.printSciDouble(*pointLOG, startDSC[1], precision, 20, left);
     	*pointLOG << std::endl;
-    	*pointLOG << "y_2(1) = 4*2^{1/2}*V_{1}*T_{1}^{3/2}*I_{3/2}(\\phi_{C}(1)) - \\phi'_{C}(0) = ";
-    	printer.printSciDouble(*pointLOG, startSC[2], precision, 20, left);
+    	*pointLOG << "y_2(1) = \\psi_{C}(1) = ";
+    	printer.printSciDouble(*pointLOG, startDSC[2], precision, 20, left);
+    	*pointLOG << std::endl;
+    	*pointLOG << "y_3(1) = \\psi_{C}(1) = ";
+    	printer.printSciDouble(*pointLOG, startDSC[3], precision, 20, left);
+    	*pointLOG << std::endl;
+    	*pointLOG << "y_4(1) = (3*\\pi*(2*TC_1)^{1/2})^{-1}*psi'_{C}(1) = ";
+    	printer.printSciDouble(*pointLOG, startDSC[4], precision, 20, left);
     	*pointLOG << std::endl;
     }
 
 	rhsColdEntropy.updateParameters(a, b);
 
-	coldEntropySolver.Integrate(rhsColdEntropy, startSC, xFrom, xTo);
-	currentSC = startSC[2];
-	(*(data["SC"]))[v].setValue(currentSC*Z);
+	coldEntropySolver.Integrate(rhsColdEntropy, startDSC, xFrom, xTo);
+	currentDSC = startDSC[4];
+	(*(data["DSC"]))[v].setValue(currentDSC*pow(Z, 1.0/3.0));
 
-	calculated["SC"] = true;
+	calculated["DSC"] = true;
 
 	if (printPointLogOn || pointLogStreamIsSet) {
-		Int size = coldEntropyData.Count();
+		Int size = coldEnergyData.Count();
         printer.printString((*pointLOG), "x");
-        printer.printString((*pointLOG), "phi_C(x)");
-        printer.printString((*pointLOG), "dphi_C(x)");
-        printer.printString((*pointLOG), "SC(x)");
+        printer.printString((*pointLOG), "phi_{C}(x)");
+        printer.printString((*pointLOG), "dphi_{C}(x)");
+        printer.printString((*pointLOG), "psi_{C}(x)");
+        printer.printString((*pointLOG), "dpsi_{C}(x)");
+        printer.printString((*pointLOG), "DSC(x)");
         (*pointLOG) << std::endl;
         for (Int i = 0; i < size; ++i) {
             printer.printSciDouble((*pointLOG), coldEntropyData.xSave[i], precision);
             printer.printSciDouble((*pointLOG), coldEntropyData.ySave[0][i], precision);
             printer.printSciDouble((*pointLOG), coldEntropyData.ySave[1][i], precision);
             printer.printSciDouble((*pointLOG), coldEntropyData.ySave[2][i], precision);
+            printer.printSciDouble((*pointLOG), coldEntropyData.ySave[3][i], precision);
+            printer.printSciDouble((*pointLOG), coldEntropyData.ySave[4][i], precision);
             (*pointLOG) << std::endl;
         }
-        *pointLOG << "Calculated entropy SC_1 = SC(0) = ";
-        printer.printSciDouble((*pointLOG), currentSC, precision);
+        *pointLOG << "Calculated entropy DSC_1 = DSC(0) = ";
+        printer.printSciDouble((*pointLOG), currentDSC, precision);
         *pointLOG << std::endl;
 
-		*pointLOG << "Transform to SC_Z = SC_1*Z = ";
-		printer.printSciDouble((*pointLOG), currentSC*Z, precision);
+		*pointLOG << "Transform to DSC_Z = DSC_1*Z^{1/3} = ";
+		printer.printSciDouble((*pointLOG), currentDSC*pow(Z, 1.0/3.0), precision);
         *pointLOG << std::endl;
 
         SCtime = pointTimer.getElapsedTimeInMilliSec() - SCtime;
         *pointLOG << "Elapsed time = " << SCtime << " ms" << std::endl;
     }
 }
-void FTTF::calculateM(Int v, Int t) {
+void QECorr::calculateDM(Int v, Int t) {
 	Double Mtime;
 	Double phi_1 = phi(1);
+	Double psi_1 = psi(1);
 	if (printPointLogOn || pointLogStreamIsSet) {
 		Mtime = pointTimer.getElapsedTimeInMilliSec();
-		*pointLOG << "Calculating M:" << std::endl;
+		*pointLOG << "Calculating DM:" << std::endl;
 	}
-	Double currentM;
+
+	Double currentDM = FDmhalf(phi_1);
 	if (printPointLogOn || pointLogStreamIsSet) {
-		printer.printSciDouble(*pointLOG, currentM, precision, 20, left);
+		*pointLOG << "I_{1/2}(\\phi(1)) = ";
+		printer.printSciDouble(*pointLOG, currentDM, precision, 20, left);
 		*pointLOG << std::endl;
-		*pointLOG << "M_{TF} = T*\\phi(1) = ";
+		*pointLOG << "DM_{TF} = (0.5*T)^{1/2}/(3*\\pi)*(0.5*\\I_{1/2}(phi(1)) + \\psi(1)) = ";
 	}
-	currentM = (*(data["T"]))[t]()*phi_1;
-	(*(data["M"]))[v*Tsize + t].setValue(currentM);
-	calculated["M"]  = true;
+	currentDM = sqrt(0.5*(*(data["T"]))[t]())/3.0/M_PI
+        	  * (0.5*currentDM + psi_1);
+	(*(data["DM"]))[v*Tsize + t].setValue(currentDM);
+	calculated["DM"]  = true;
 	if (printPointLogOn || pointLogStreamIsSet) {
-		printer.printSciDouble(*pointLOG, currentM, precision, 20, left);
+		printer.printSciDouble(*pointLOG, currentDM, precision, 20, left);
 		*pointLOG << std::endl;
 		Mtime = pointTimer.getElapsedTimeInMilliSec() - Mtime;
 		*pointLOG << "Elapsed time = " << Mtime << " ms" << std::endl;
 	}
 }
-void FTTF::calculateMT(Int v, Int t) {
-	if (!calculated["M"]) calculateM(v, t);
-	if (!calculated["MC"]) calculateMC(v);
+void QECorr::calculateDMT(Int v, Int t) {
+	if (!calculated["DM"]) calculateDM(v, t);
+	if (!calculated["DMC"]) calculateDMC(v);
 	Double MTtime;
 	if (printPointLogOn || pointLogStreamIsSet) {
 		MTtime = pointTimer.getElapsedTimeInMilliSec();
-		*pointLOG << "Calculating MT:" << std::endl;
-		*pointLOG << "MT = M - MC = ";
+		*pointLOG << "Calculating DMT:" << std::endl;
+		*pointLOG << "DMT = DM - DMC = ";
 	}
 	
-	Double currentMT;
-	currentMT = (*(data["M"]))[v*Tsize + t]() - (*(data["MC"]))[v]();
-	(*(data["MT"]))[v*Tsize + t].setValue(currentMT);
-	calculated["MT"] = true;
+	Double currentDMT;
+	currentDMT = (*(data["DM"]))[v*Tsize + t]() - (*(data["DMC"]))[v]();
+	(*(data["DMT"]))[v*Tsize + t].setValue(currentDMT);
+	calculated["DMT"] = true;
 
 	if (printPointLogOn || pointLogStreamIsSet) {
-		printer.printSciDouble(*pointLOG, currentMT, precision, 20, left);
+		printer.printSciDouble(*pointLOG, currentDMT, precision, 20, left);
 		*pointLOG << std::endl;
 		MTtime = pointTimer.getElapsedTimeInMilliSec() - MTtime;
 		*pointLOG << "Elapsed time = " << MTtime << " ms" << std::endl;
 	}
 }
-void FTTF::calculateMC(Int v) {
+void QECorr::calculateDMC(Int v) {
 	Double MCtime;
 	Double coldPhi_1 = coldPhi(1);
+	Double coldPsi_1 = coldPsi(1);
 	if (printPointLogOn || pointLogStreamIsSet) {
 		MCtime = pointTimer.getElapsedTimeInMilliSec();
-		*pointLOG << "Calculating MC:" << std::endl;
+		*pointLOG << "Calculating DMC:" << std::endl;
 	}
-	Double currentMC;
+	Double currentDMC = FDmhalf(coldPhi_1);
 	if (printPointLogOn || pointLogStreamIsSet) {
-		printer.printSciDouble(*pointLOG, currentMC, precision, 20, left);
+		*pointLOG << "I_{1/2}(\\phi_{C}(1)) = ";
+		printer.printSciDouble(*pointLOG, currentDMC, precision, 20, left);
 		*pointLOG << std::endl;
-		*pointLOG << "MC_{TF} = TC*\\phi_{C}(1) = ";
+		*pointLOG << "DMC_{TF} = (0.5*TC)^{1/2}/(3*\\pi)*(0.5*\\I_{1/2}(phi_{C}(1)) + \\psi_{C}(1)) = ";
 	}
-	currentMC = coldT()*coldPhi_1;
-	(*(data["MC"]))[v].setValue(currentMC);
-	calculated["MC"] = true;
+	currentDMC = sqrt(0.5*coldT())/3.0/M_PI
+        	  * (0.5*currentDMC + coldPsi_1);
+	(*(data["DMC"]))[v].setValue(currentDMC);
+	calculated["DMC"] = true;
 	if (printPointLogOn || pointLogStreamIsSet) {
-		printer.printSciDouble(*pointLOG, currentMC, precision, 20, left);
+		printer.printSciDouble(*pointLOG, currentDMC, precision, 20, left);
 		*pointLOG << std::endl;
 		MCtime = pointTimer.getElapsedTimeInMilliSec() - MCtime;
 		*pointLOG << "Elapsed time = " << MCtime << " ms" << std::endl;

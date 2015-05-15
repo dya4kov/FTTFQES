@@ -541,10 +541,11 @@ void FTTFQEpotential::setLogStream(std::ofstream* _LOG) {
     logStreamIsSet = true;
 }
 
-void FTTFpotential::clearLogStream() {
+void FTTFQEpotential::clearLogStream() {
     if (logStreamIsSet) {
         LOG = NULL;
         logStreamIsSet = false;
+        phi.clearLogStream();
     }
 }
 
