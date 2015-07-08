@@ -1,0 +1,31 @@
+# Lines starting from spaces or after '#' are ignored
+#========================================================================
+Al                          # element name (from PeriodicTable)
+#========================================================================
+D[g/cm^3,lin](1.0, 3.0, 5) # (V)olume/(D)ensity/(C)oncentration dataset: 
+                            # [unit,scale](from, to, number_of_points)
+                            # units: V - cm^{3}, m^{3}, atm
+                            #        D - g/cm^3, kg/m^3, atm
+                            #        C - cm^{-3}, m^{-3}, atm
+                            # scale: lin, log
+#========================================================================                  
+T[atm,lin](1.0, 3.0, 5)    # (T)emperature dataset:
+                            # [unit,scale](from, to, number_of_points)
+                            # units: eV, K, atm (hartree)
+#========================================================================
+# Output dataset (columns which appears in output file) are divided by
+# spaces, units and scaling are optional (atomic by default)
+#
+# Available data: V, D, C, T, DP, DPT, DPC, DE, DET, DEC, DS, DM, DMT, DMC
+# Corrections to: 
+# Pressure: DP, DPT - thermal, DPC - cold
+#     Available units: Pa, GPa, MBar, atm
+# Energy:   DE, DET - thermal, DEC - cold
+#     Available units: eV, atm
+# Entropy:  DS
+# Chemical potential: DM, DMT - thermal, DMC - cold
+#     Available units: eV, atm
+#========================================================================
+D[g/cm^3] T[eV] DP[GPa,lin] DET
+#========================================================================
+1e-7                        # relative tolerance

@@ -12,6 +12,9 @@
 #include "../hdr/Printer.h"
 #include "../hdr/Timer.h"
 #include "../hdr/Yfunction.h"
+
+#define POTENTIAL_CORR_DATA_FILE "res/TFPotentialCorrection.dat"
+
 /**
 * @brief The class implements interface for calculating correction to the Thomas-Fermi potential.
 */

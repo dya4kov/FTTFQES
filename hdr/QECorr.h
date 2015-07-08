@@ -17,6 +17,9 @@
 #include <sstream>
 #include <fstream>
 #include <stdlib.h>
+
+#define DEFAULT_INPUT_FILE "in/FTTFQEinput.dat"
+#define DEFAULT_OUTPUT_FILE "out/FTTFQEoutput.dat"
 /**
 * @brief This class implements interface for Thomas-Fermi model.
 * @details The main formulas for calculation of thermodynamic quantities
@@ -819,9 +822,9 @@ void QECorr::calculateAll() {
 	Double localTime = 0;
 	Double pointTime = 0;
 	Int progress = 0;
-	if (showProgress) {
-		std::cout << "progress:  0\%";
-	}
+	// if (showProgress) {
+	// 	std::cout << "progress:  0\%";
+	// }
 	/****************************LOG Section**************************/
 	if (printMainLogOn || mainLogStreamIsSet) {                      //
 		*mainLOG << "Start calculation:" << std::endl;               //
@@ -929,17 +932,18 @@ void QECorr::calculateAll() {
 			/*******************************************************************************/
 			phi.setParameters((*(data["V"]))[v], (*(data["T"]))[t], Z);
 			psi.setParameters((*(data["V"]))[v], (*(data["T"]))[t], Z);
+			if (showProgress) {
+				std::stringstream ss;
+				int progress = (100*(v*Tsize + t + 1))/(Vsize*Tsize);
+				ss << progress;
+				std::cout << "\r";
+				std::cout << "progress: ";
+				std::cout << ss.str();
+				std::cout << "\%";
+			}
 			for (Int i = coldVarBound; i < varNum; ++i) {                    
 				calculated[varName[i]] = false;
 				if (need[varName[i]]) calculate(varName[i], v, t);
-			}
-			if (showProgress) {
-				Int pos = std::cout.tellp();
-				std::cout << pos;
-				std::stringstream ss;
-				ss << (100*(v*Tsize + t + 1))/(Vsize*Tsize);
-				std::cout.seekp(pos - 3);
-				std::cout.write(ss.str().c_str(), 2);
 			}
 			/****************************LOG Section********************************************/
 			if (printPointLogOn || pointLogStreamIsSet) {                                      //
@@ -986,6 +990,10 @@ void QECorr::calculateAll() {
 			}                                                                                  //
 			/***********************************************************************************/
 		}
+	}
+	if (showProgress) {
+		std::cout << "\r";
+		std::cout << "progress: finished" << std::endl;
 	}
 }
 

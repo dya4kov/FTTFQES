@@ -11,6 +11,8 @@
 #include "../hdr/Printer.h"
 #include "../hdr/Timer.h"
 
+#define POTENTIAL_DATA_FILE "res/TFPotential.dat"
+
 /**
  * @brief This class implements interface for calculating Thomas-Fermi potential.
  */
@@ -170,7 +172,7 @@ FTTFpotential::~FTTFpotential() {
 }
 
 void FTTFpotential::setPhiTable() {
-    std::ifstream datafile("res/TFPotential.dat", std::ios::in);
+    std::ifstream datafile(POTENTIAL_DATA_FILE, std::ios::in);
     Double currentValue;
     for (Int t = 0; t < tTableSize; ++t) {
         for (Int v = 0; v < vTableSize; ++v) {

@@ -4,11 +4,12 @@
 
 int main() {
 	FTTFelectronicStates ES(7);
-	Volume V(1.2);
-	Temperature T(100.2);
+	ES.setPrintMainLogOn();
+	PhysQ V(1.2);
+	PhysQ T(100.2);
 	ES.setParameters(V, T, 13.0);
-	std::cout << ES.N() << std::endl;
-	std::cout << ES.NTF() << std::endl;
-	std::cout << ES.DN() << std::endl;
+	std::cout << ES.Nlow() << std::endl;
+	std::cout << ES.NTFlow() << std::endl;
+	std::cout << ES.DNlow() << std::endl;
 	return 0;
 }

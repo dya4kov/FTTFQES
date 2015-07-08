@@ -17,6 +17,9 @@
 #include <sstream>
 #include <fstream>
 #include <stdlib.h>
+
+#define DEFAULT_INPUT_FILE "in/FTTFinput.dat" 
+#define DEFAULT_OUTPUT_FILE "out/FTTFoutput.dat" 
 /**
 * @brief This class implements interface for Thomas-Fermi model.
 * @details The main formulas for calculation of thermodynamic quantities
@@ -791,9 +794,9 @@ void FTTF::calculateAll() {
 	Double localTime = 0;
 	Double pointTime = 0;
 	Int progress = 0;
-	if (showProgress) {
-		std::cout << "progress:  0\%";
-	}
+	// if (showProgress) {
+	// 	std::cout << "progress:          ";
+	// }
 	/****************************LOG Section**************************/
 	if (printMainLogOn || mainLogStreamIsSet) {                      //
 		*mainLOG << "Start calculation:" << std::endl;               //
@@ -895,17 +898,18 @@ void FTTF::calculateAll() {
 			}                                                                              //
 			/*******************************************************************************/
 			phi.setParameters((*(data["V"]))[v], (*(data["T"]))[t], Z);
+			if (showProgress) {
+				std::stringstream ss;
+				int progress = (100*(v*Tsize + t + 1))/(Vsize*Tsize);
+				ss << progress;
+				std::cout << "\r";
+				std::cout << "progress: ";
+				std::cout << ss.str();
+				std::cout << "\%";
+			}	
 			for (Int i = coldVarBound; i < varNum; ++i) {                    
 				calculated[varName[i]] = false;
 				if (need[varName[i]]) calculate(varName[i], v, t);
-			}
-			if (showProgress) {
-				Int pos = std::cout.tellp();
-				std::cout << pos;
-				std::stringstream ss;
-				ss << (100*(v*Tsize + t + 1))/(Vsize*Tsize);
-				std::cout.seekp(pos - 3);
-				std::cout.write(ss.str().c_str(), 2);
 			}
 			/****************************LOG Section********************************************/
 			if (printPointLogOn || pointLogStreamIsSet) {                                      //
@@ -948,6 +952,10 @@ void FTTF::calculateAll() {
 			}                                                                                  //
 			/***********************************************************************************/
 		}
+	}
+	if (showProgress) {
+		std::cout << "\r";
+		std::cout << "progress: finished" << std::endl;
 	}
 }
 
@@ -1068,7 +1076,7 @@ void FTTF::calculateE(Int v, Int t) {
 		*pointLOG << std::endl;
 	}
 
-    startE[0] = phi_1
+    startE[0] = phi_1;
     startE[1] = phi_1;
     startE[2] = 2.0*sqrt(2.0)*V1*pow(T1, 5.0/2.0)/M_PI/M_PI
                 * FD3half(phi_1) + E0;
@@ -1271,7 +1279,7 @@ void FTTF::calculateS(Int v, Int t) {
 	}
 	
 	startS[0] = phi_1;
-    startS[1] = phi_1
+    startS[1] = phi_1;
 	startS[2] = 4.0*sqrt(2.0*T1)*V1*T1/M_PI/M_PI
     		    * FD3half(phi_1)
 	            - phi.derivative(0);

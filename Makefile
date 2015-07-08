@@ -8,16 +8,6 @@ CC=g++
 CFLAGS=-I$(IDIR)
 LIBS=-lm
 
-TF_POT_DEPS=$(IDIR)/FTTFpotential.h \
-	  		$(IDIR)/ThermodynamicFunction.h 
-TFQE_POT_DEPS=
-TF_MOD_DEPS=
-TFQE_MOD_DEPS=
-TFS_MOD_DEPS=
-TF_EL_STATE_DEPS=
-TFQES_DEPS=
-Y_DEPS=$(IDIR)/Yfunction.h \
-
 TF_POT_OBJ=$(ODIR)/FTTFpotential.o
 TFQE_POT_OBJ=$(ODIR)/FTTFQEpotential.o
 TF_MOD_OBJ=$(ODIR)/FTTFmodel.o
@@ -28,7 +18,7 @@ TFQES_OBJ=$(ODIR)/FTTFQESmodel.o
 Y_OBJ=$(ODIR)/Yfunction.o
 PRINT_OBJ=$(ODIR)/printer.o
 TIMER_OBJ=$(ODIR)/Timer.o
-MAP_OBJ=$(ODIR)/mapTest.o
+PER_TABL_OBJ=$(ODIR)/periodicTableTest.o
 
 objdir:
 	mkdir -p $(ODIR) 
@@ -83,8 +73,8 @@ printTest: objdir bindir $(PRINT_OBJ)
 timer: objdir bindir $(TIMER_OBJ) 
 	$(CC) -o $(BDIR)/$@ $(TIMER_OBJ) $(LIBS)
 
-mapTest: objdir bindir $(MAP_OBJ) 
-	$(CC) -o $(BDIR)/$@ $(MAP_OBJ) $(LIBS)
+periodicTableTest: objdir bindir $(PER_TABL_OBJ) 
+	$(CC) -o $(BDIR)/$@ $(PER_TABL_OBJ) $(LIBS)
 
 .PHONY: clean
 
