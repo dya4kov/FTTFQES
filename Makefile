@@ -57,6 +57,11 @@ FTTFeStates: objdir bindir logdir $(TF_EL_STATE_OBJ)
 
 FTTFeStates: DEPS=$(TF_EL_STATE_OBJ)
 
+FTTFS: objdir bindir logdir $(TFS_MOD_OBJ) 
+	$(CC) -o $(BDIR)/$@ $(TFS_MOD_OBJ) $(LIBS)
+
+FTTFS: DEPS=$(TFS_DEPS)
+
 FTTFQES: objdir bindir logdir $(TFQES_MOD_OBJ) 
 	$(CC) -o $(BDIR)/$@ $(TFQES_MOD_OBJ) $(LIBS)
 

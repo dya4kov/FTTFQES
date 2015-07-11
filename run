@@ -1,4 +1,5 @@
-./bin/FTTFmodel --input FTTFinput.dat --output FTTFoutput.dat --loglvl 2 --showprogress on
+./bin/FTTFS --input FTTFSinput.dat --output FTTFSoutput.dat --loglvl 2 --showprogress off
+#./bin/FTTFmodel --input FTTFinput.dat --output FTTFoutput.dat --loglvl 2 --showprogress on
 #./bin/FTTFQEmodel --input FTTFQEinput.dat --output FTTFQEoutput.dat --loglvl 2 --showprogress on
 #./bin/FTTFpot --output phi.dat --V 1.0 --T 1.0 --Z 1.0 --eps 1e-6 --log on
 #./bin/FTTFQEpot --output psi.dat --V 1.0 --T 1.0 --Z 1.0 --eps 1e-6 --log on

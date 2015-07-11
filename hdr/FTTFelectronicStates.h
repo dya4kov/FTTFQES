@@ -8,6 +8,8 @@
 #include "../hdr/FTTFpotential.h"
 #include "../hdr/ThermodynamicFunction.h"
 #include "../hdr/FDhalfInc.h"
+#include "../hdr/Printer.h"
+#include "../hdr/Timer.h"
 #include <fstream>
 #include <iostream>
 
@@ -30,6 +32,12 @@ public:
     Double Nlow();
 	Double DNlow();
     Double N(); // Nlow + NTFhigh
+    // explicit calculation of energy levels
+    void calculateEnergyLevels(); 
+    /**
+    * @brief Set tolerance eps for the further calculations. Default is @f$ 10^{-6} @f$.
+    */
+    void setTolerance(const Double _eps);
     // log and output
     /**
     * @brief Write log to specified stream.
@@ -281,7 +289,7 @@ private:
 
 	void calculateBoundEnergy(); Double boundEnergy; bool calculated_BE;
     void calculateEnergyLevel(Int n, Int l); DoubleMat energyLevel; bool** calculatedLevel;
-    void calculateEnergyLevels(); 
+
 
     Double boundEnergyRoot(Double e1, Double e2); DoubleVec BERoot;
 	Double MixBound();
@@ -393,6 +401,17 @@ FTTFelectronicStates::FTTFelectronicStates(const Int _nMax) :
         precision = 7;
     }
 
+void FTTFelectronicStates::setTolerance(const Double _eps) {
+    eps = _eps;
+    precision = static_cast<int>(-log10(eps));
+    if (printMainLogOn) {
+        *mainLOG << "electronic states accepted new tolerance, eps = ";
+        printer.printSciDouble(*mainLOG, eps, precision);
+        *mainLOG << std::endl;
+    }
+    phi.setTolerance(eps);
+}
+
 void FTTFelectronicStates::setMainLogStream(std::ofstream* _LOG) {
     if (printMainLogOn) setPrintMainLogOff();
     mainLOG = _LOG;
@@ -401,11 +420,11 @@ void FTTFelectronicStates::setMainLogStream(std::ofstream* _LOG) {
 }
 
 void FTTFelectronicStates::clearMainLogStream() {
+    setPrintMainLogOff();
     if (mainLogStreamIsSet) {
         mainLOG = NULL;
         mainLogStreamIsSet = false;
     }
-    setPrintMainLogOff();
 }
 
 void FTTFelectronicStates::setPrintMainLogOn() {
@@ -895,66 +914,71 @@ Double FTTFelectronicStates::boundEnergyRoot(Double e1, Double e2) {
     Double overallTime;
     Double averageTime;
     Double err;
-
-    if (printMainLogOn) {
-        printer.printString((*mainLOG), "nStep",      10, left);
-        printer.printString((*mainLOG), "BEleft",     20, left);
-        printer.printString((*mainLOG), "BEright",    20, left);
-        printer.printString((*mainLOG), "BEcenter",   20, left);
-        printer.printString((*mainLOG), "Nstates",    20, left);
-        printer.printString((*mainLOG), "NstatesTF",  20, left);
-        printer.printString((*mainLOG), "error",      20, left);
-        printer.printString((*mainLOG), "time[ms]",   20, left);
-        (*mainLOG) << std::endl;
-    }
+    /************************main LOG section*********************/
+    if (printMainLogOn) {                                        //
+        printer.printString((*mainLOG), "nStep",      10, left); //
+        printer.printString((*mainLOG), "BEleft",     20, left); //
+        printer.printString((*mainLOG), "BEright",    20, left); //
+        printer.printString((*mainLOG), "BEcenter",   20, left); //
+        printer.printString((*mainLOG), "Nstates",    20, left); //
+        printer.printString((*mainLOG), "NstatesTF",  20, left); //
+        printer.printString((*mainLOG), "error",      20, left); //
+        printer.printString((*mainLOG), "time[ms]",   20, left); //
+        (*mainLOG) << std::endl;                                 //
+    }                                                            //
+    /*************************************************************/
     err = abs(boundEnergyLeft - boundEnergyRight) / abs(boundEnergyLeft + boundEnergyRight);
-    while (err > eps/10)
-    {
-        if (printMainLogOn) {
-            timePerStep = mainTimer.getElapsedTimeInMilliSec();
-        }
+    while (err > eps/10) {
+        /************************main LOG section*****************************************/
+        if (printMainLogOn) {                                                            //
+            timePerStep = mainTimer.getElapsedTimeInMilliSec();                          //
+        }                                                                                //
+        /*********************************************************************************/
         currentBoundEnergy = (boundEnergyLeft + boundEnergyRight) / 2;
 
         trueStates = pseudoStates(currentBoundEnergy);
         TFStates = pseudoStatesTF(currentBoundEnergy);
-
-        if (printMainLogOn) {
-            printer.printInt((*mainLOG), nStep, 10, left);
-            printer.printSciDouble((*mainLOG), boundEnergyLeft, precision, 20, left);
-            printer.printSciDouble((*mainLOG), boundEnergyRight, precision, 20, left);
-            printer.printSciDouble((*mainLOG), currentBoundEnergy, precision, 20, left);
-            printer.printSciDouble((*mainLOG), trueStates, precision, 20, left);
-            printer.printSciDouble((*mainLOG), TFStates, precision, 20, left);
-        }
-
+        /************************main LOG section*****************************************/
+        if (printMainLogOn) {                                                            //
+            printer.printInt((*mainLOG), nStep, 10, left);                               //
+            printer.printSciDouble((*mainLOG), boundEnergyLeft, precision, 20, left);    //
+            printer.printSciDouble((*mainLOG), boundEnergyRight, precision, 20, left);   //
+            printer.printSciDouble((*mainLOG), currentBoundEnergy, precision, 20, left); //
+            printer.printSciDouble((*mainLOG), trueStates, precision, 20, left);         //
+            printer.printSciDouble((*mainLOG), TFStates, precision, 20, left);           //
+        }                                                                                //
+        /*********************************************************************************/
         if (trueStates > TFStates) boundEnergyLeft += (boundEnergyRight - boundEnergyLeft) / 2;
         else boundEnergyRight -= (boundEnergyRight - boundEnergyLeft) / 2;
 
         err = abs(boundEnergyLeft - boundEnergyRight) / abs(boundEnergyLeft + boundEnergyRight);
-
-        if (printMainLogOn) {
-            printer.printSciDouble((*mainLOG), err, precision, 20, left);
-            timePerStep = mainTimer.getElapsedTimeInMilliSec() - timePerStep;
-            timeSteps[nStep] = timePerStep;
-            printer.printSciDouble((*mainLOG), timePerStep, precision, 20, left);
-            *mainLOG << std::endl;
-            ++nStep;
-        }
+        /************************main LOG section*********************************/
+        if (printMainLogOn) {                                                    //
+            printer.printSciDouble((*mainLOG), err, precision, 20, left);        //
+            timePerStep = mainTimer.getElapsedTimeInMilliSec() - timePerStep;    //
+            timeSteps[nStep] = timePerStep;                                      //
+            printer.printSciDouble((*mainLOG), timePerStep, precision, 20, left);//
+            *mainLOG << std::endl;                                               //
+            ++nStep;                                                             //
+        }                                                                        //
+        /*************************************************************************/
     }
     currentBoundEnergy = (boundEnergyLeft + boundEnergyRight) / 2;
-    if (printMainLogOn) {
-        overallTime = 0;
-        for (Int i = 0; i <= nStep; ++i) {
-            overallTime += timeSteps[i];
-        }
-        averageTime = overallTime/(nStep + 1);
-        *mainLOG << "calculated root: " 
-                 << currentBoundEnergy << std::endl;
-        *mainLOG << "overall time: " 
-                 << overallTime << " [ms]" << std::endl;
-        *mainLOG << "average time: "
-                 << averageTime << " [ms]" << std::endl;
-    }
+    /************************main LOG section*****************************/
+    if (printMainLogOn) {                                                //
+        overallTime = 0;                                                 //
+        for (Int i = 0; i <= nStep; ++i) {                               //
+            overallTime += timeSteps[i];                                 //
+        }                                                                //
+        averageTime = overallTime/(nStep + 1);                           //
+        *mainLOG << "calculated root: "                                  //
+                 << currentBoundEnergy << std::endl;                     //
+        *mainLOG << "overall time: "                                     //
+                 << overallTime << " [ms]" << std::endl;                 //
+        *mainLOG << "average time: "                                     //
+                 << averageTime << " [ms]" << std::endl;                 //
+    }                                                                    //
+    /*********************************************************************/
     return currentBoundEnergy;
 }
 
@@ -986,49 +1010,52 @@ void FTTFelectronicStates::calculateBoundEnergy() {
         // of mixing energy levels
         if (BERoot[i] > MixBound()) {
             boundEnergy = BERoot[i - 1];
-            if (printMainLogOn) {
-                (*mainLOG) << "Mixing levels boundary: " 
-                           << mixBound << std::endl;
-                (*mainLOG) << "All found roots:" << std::endl;
-                printer.printString((*mainLOG), "n",      10, left);
-                printer.printString((*mainLOG), "e1",     20, left);
-                printer.printString((*mainLOG), "e2",     20, left);
-                printer.printString((*mainLOG), "BEroot", 20, left);
-                (*mainLOG) << std::endl;
-                for (Int j = 0; j <= i; ++j) {
-                    printer.printInt((*mainLOG), j, 10, left);
-                    printer.printSciDouble((*mainLOG), energyLevel[j + 1][0], precision, 20, left);
-                    printer.printSciDouble((*mainLOG), energyLevel[j + 2][j + 1], precision, 20, left);
-                    printer.printSciDouble((*mainLOG), BERoot[j], precision, 20, left);
-                    (*mainLOG) << std::endl;
-                }
-                (*mainLOG) << "Selected root before mixing: " 
-                           << boundEnergy << std::endl;
-
-            }
+            /*********************************main LOG section*******************************************/
+            if (printMainLogOn) {                                                                       //
+                (*mainLOG) << "Mixing levels boundary: "                                                //
+                           << mixBound << std::endl;                                                    //
+                (*mainLOG) << "All found roots:" << std::endl;                                          //
+                printer.printString((*mainLOG), "n",      10, left);                                    //
+                printer.printString((*mainLOG), "e1",     20, left);                                    //
+                printer.printString((*mainLOG), "e2",     20, left);                                    //
+                printer.printString((*mainLOG), "BEroot", 20, left);                                    //
+                (*mainLOG) << std::endl;                                                                //
+                for (Int j = 0; j <= i; ++j) {                                                          //
+                    printer.printInt((*mainLOG), j, 10, left);                                          //
+                    printer.printSciDouble((*mainLOG), energyLevel[j + 1][0], precision, 20, left);     //
+                    printer.printSciDouble((*mainLOG), energyLevel[j + 2][j + 1], precision, 20, left); //
+                    printer.printSciDouble((*mainLOG), BERoot[j], precision, 20, left);                 //
+                    (*mainLOG) << std::endl;                                                            //
+                }                                                                                       //
+                (*mainLOG) << "Selected root before mixing: "                                           //
+                           << boundEnergy << std::endl;                                                 //
+            }                                                                                           //
+            /********************************************************************************************/
             calculated_BE = true;
             return;
         }
     }
     boundEnergy = BERoot[nMax - 2];
-    if (printMainLogOn) {
-        (*mainLOG) << "Mixing levels boundary: " 
-                   << mixBound << std::endl;
-        (*mainLOG) << "All found roots:" << std::endl;
-        printer.printString((*mainLOG), "n",      10, left);
-        printer.printString((*mainLOG), "e1",     20, left);
-        printer.printString((*mainLOG), "e2",     20, left);
-        printer.printString((*mainLOG), "BEroot", 20, left);
-        for (Int j = 0; j < nMax; ++j) {
-            printer.printInt((*mainLOG), j, 10, left);
-            printer.printSciDouble((*mainLOG), energyLevel[j + 1][0], precision, 20, left);
-            printer.printSciDouble((*mainLOG), energyLevel[j + 2][j + 1], precision, 20, left);
-            printer.printSciDouble((*mainLOG), BERoot[j], precision, 20, left);
-            (*mainLOG) << std::endl;
-        }
-        (*mainLOG) << "Selected root before mixing: BE = " 
-                   << boundEnergy << std::endl;    
-    }
+    /*********************************main LOG section*******************************************/
+    if (printMainLogOn) {                                                                       //
+        (*mainLOG) << "Mixing levels boundary: "                                                //
+                   << mixBound << std::endl;                                                    //
+        (*mainLOG) << "All found roots:" << std::endl;                                          //
+        printer.printString((*mainLOG), "n",      10, left);                                    //
+        printer.printString((*mainLOG), "e1",     20, left);                                    //
+        printer.printString((*mainLOG), "e2",     20, left);                                    //
+        printer.printString((*mainLOG), "BEroot", 20, left);                                    //
+        for (Int j = 0; j < nMax; ++j) {                                                        //
+            printer.printInt((*mainLOG), j, 10, left);                                          //
+            printer.printSciDouble((*mainLOG), energyLevel[j + 1][0], precision, 20, left);     //
+            printer.printSciDouble((*mainLOG), energyLevel[j + 2][j + 1], precision, 20, left); //
+            printer.printSciDouble((*mainLOG), BERoot[j], precision, 20, left);                 //
+            (*mainLOG) << std::endl;                                                            //
+        }                                                                                       //
+        (*mainLOG) << "Selected root before mixing: BE = "                                      //
+                   << boundEnergy << std::endl;                                                 //
+    }                                                                                           //
+    /********************************************************************************************/
     calculated_BE = true;
 }
 
@@ -1061,12 +1088,12 @@ void FTTFelectronicStates::calculateEnergyLevel(Int n, Int l) {
     Double averageTime;
     Double err;
     Int nStep = 0;
-
-    if (printMainLogOn) {
-        printer.printInt((*mainLOG), n, 10, left);
-        printer.printInt((*mainLOG), l, 10, left);
-    }
-
+    /**********main LOG section*********************/
+    if (printMainLogOn) {                          //
+        printer.printInt((*mainLOG), n, 10, left); //
+        printer.printInt((*mainLOG), l, 10, left); //
+    }                                              //
+    /***********************************************/
     err = abs(YnlLeft - YnlRight) / abs(YnlLeft + YnlRight);
     while (err > eps / 100) {
         if (printMainLogOn) {
@@ -1076,18 +1103,20 @@ void FTTFelectronicStates::calculateEnergyLevel(Int n, Int l) {
         calculateRP2(eArg, lArg);
         calculateRP1(eArg, lArg);
         calculateAction(eArg, lArg);
-        if (printMainLogOn && nStep > 0) {
-            printer.printString((*mainLOG), "", 20, left, ' ');
-        }
-        if (printMainLogOn) {
-            printer.printInt((*mainLOG), nStep, 10, left);
-            printer.printSciDouble((*mainLOG), YnlLeft, precision, 20, left);
-            printer.printSciDouble((*mainLOG), YnlRight, precision, 20, left);
-            printer.printSciDouble((*mainLOG), eArg, precision, 20, left);
-            printer.printSciDouble((*mainLOG), action, precision, 20, left);
-            printer.printSciDouble((*mainLOG), rp1, precision, 20, left);
-            printer.printSciDouble((*mainLOG), rp2, precision, 20, left);
-        }
+        /***************************main LOG section****************************/
+        if (printMainLogOn && nStep > 0) {                                     //
+            printer.printString((*mainLOG), "", 20, left, ' ');                //
+        }                                                                      //
+        if (printMainLogOn) {                                                  //
+            printer.printInt((*mainLOG), nStep, 10, left);                     //
+            printer.printSciDouble((*mainLOG), YnlLeft, precision, 20, left);  //
+            printer.printSciDouble((*mainLOG), YnlRight, precision, 20, left); //
+            printer.printSciDouble((*mainLOG), eArg, precision, 20, left);     //
+            printer.printSciDouble((*mainLOG), action, precision, 20, left);   //
+            printer.printSciDouble((*mainLOG), rp1, precision, 20, left);      //
+            printer.printSciDouble((*mainLOG), rp2, precision, 20, left);      //
+        }                                                                      //
+        /***********************************************************************/
         if (action - exactAction > 0) {
             YnlRight -= (YnlRight - YnlLeft)*0.5;
         }
@@ -1095,97 +1124,103 @@ void FTTFelectronicStates::calculateEnergyLevel(Int n, Int l) {
             YnlLeft += (YnlRight - YnlLeft)*0.5;
         }
         err = abs(YnlLeft - YnlRight) / abs(YnlLeft + YnlRight);
-        if (printMainLogOn) {
-            timePerStep = mainTimer.getElapsedTimeInMilliSec() - timePerStep;
-            timeSteps[nStep] = timePerStep;
-            printer.printSciDouble((*mainLOG), err, precision, 20, left);
-            printer.printSciDouble((*mainLOG), timePerStep, precision, 20, left);
-            *mainLOG << std::endl;
-            ++nStep;
-        }
+        /***************************main LOG section*******************************/
+        if (printMainLogOn) {                                                     //
+            timePerStep = mainTimer.getElapsedTimeInMilliSec() - timePerStep;     //
+            timeSteps[nStep] = timePerStep;                                       //
+            printer.printSciDouble((*mainLOG), err, precision, 20, left);         //
+            printer.printSciDouble((*mainLOG), timePerStep, precision, 20, left); //
+            *mainLOG << std::endl;                                                //
+            ++nStep;                                                              //
+        }                                                                         //
+        /**************************************************************************/
     }
 
     energyLevel[n][l] = 0.5*(YnlRight + YnlLeft);
     calculatedLevel[n][l] = true;
-
-    if (printMainLogOn) {
-        printer.printString((*mainLOG), "", 20, left, ' ');
-        printer.printString((*mainLOG), "", 170, left, '-');
-        *mainLOG << std::endl;
-        printer.printString((*mainLOG), "Final results: ",  20, left, ' ');
-        printer.printString((*mainLOG), "Ynl",              20, left);
-        printer.printString((*mainLOG), "Sexact",           20, left);
-        printer.printString((*mainLOG), "Scalc",            20, left);
-        printer.printString((*mainLOG), "rp1",              20, left);
-        printer.printString((*mainLOG), "rp2",              20, left);
-        printer.printString((*mainLOG), "time[ms]",         20, left);
-        printer.printString((*mainLOG), "timePerIter[ms]",  20, left);
-        *mainLOG << std::endl;
-        printer.printString((*mainLOG), "", 20, left, ' ');
-        printer.printString((*mainLOG), "", 170, left, '-');
-        *mainLOG << std::endl;
-        printer.printString((*mainLOG), "",  20, left, ' ');
-        printer.printSciDouble((*mainLOG), energyLevel[n][l], precision, 20, left);
-        printer.printSciDouble((*mainLOG), exactAction,       precision, 20, left);
-        printer.printSciDouble((*mainLOG), action,            precision, 20, left);
-        printer.printSciDouble((*mainLOG), rp1,               precision, 20, left);
-        printer.printSciDouble((*mainLOG), rp2,               precision, 20, left);
-        overallTime = 0;
-        for (Int i = 0; i <= nStep; ++i) {
-            overallTime += timeSteps[i];
-        }
-        averageTime = overallTime/(nStep + 1);
-        printer.printSciDouble((*mainLOG), overallTime,  precision, 20, left);
-        printer.printSciDouble((*mainLOG), averageTime,  precision, 20, left);
-        *mainLOG << std::endl;
-        printer.printString((*mainLOG), "", 190, left, '-');
-        *mainLOG << std::endl;
-    }
+    /********************************main LOG section********************************/
+    if (printMainLogOn) {                                                           //
+        printer.printString((*mainLOG), "", 20, left, ' ');                         //
+        printer.printString((*mainLOG), "", 170, left, '-');                        //
+        *mainLOG << std::endl;                                                      //
+        printer.printString((*mainLOG), "Final results: ",  20, left, ' ');         //
+        printer.printString((*mainLOG), "Ynl",              20, left);              //
+        printer.printString((*mainLOG), "Sexact",           20, left);              //
+        printer.printString((*mainLOG), "Scalc",            20, left);              //
+        printer.printString((*mainLOG), "rp1",              20, left);              //
+        printer.printString((*mainLOG), "rp2",              20, left);              //
+        printer.printString((*mainLOG), "time[ms]",         20, left);              //
+        printer.printString((*mainLOG), "timePerIter[ms]",  20, left);              //
+        *mainLOG << std::endl;                                                      //
+        printer.printString((*mainLOG), "", 20, left, ' ');                         //
+        printer.printString((*mainLOG), "", 170, left, '-');                        //
+        *mainLOG << std::endl;                                                      //
+        printer.printString((*mainLOG), "",  20, left, ' ');                        //
+        printer.printSciDouble((*mainLOG), energyLevel[n][l], precision, 20, left); //
+        printer.printSciDouble((*mainLOG), exactAction,       precision, 20, left); //
+        printer.printSciDouble((*mainLOG), action,            precision, 20, left); //
+        printer.printSciDouble((*mainLOG), rp1,               precision, 20, left); // 
+        printer.printSciDouble((*mainLOG), rp2,               precision, 20, left); //
+        overallTime = 0;                                                            //
+        for (Int i = 0; i <= nStep; ++i) {                                          //
+            overallTime += timeSteps[i];                                            //
+        }                                                                           //
+        averageTime = overallTime/(nStep + 1);                                      //
+        printer.printSciDouble((*mainLOG), overallTime,  precision, 20, left);      //
+        printer.printSciDouble((*mainLOG), averageTime,  precision, 20, left);      //
+        *mainLOG << std::endl;                                                      //
+        printer.printString((*mainLOG), "", 190, left, '-');                        //
+        *mainLOG << std::endl;                                                      //
+    }                                                                               //
+    /********************************************************************************/
 }
 
 void FTTFelectronicStates::calculateEnergyLevels() {
     Double overallTime;
-    if (printMainLogOn) {
-        *mainLOG << "calculating energy levels: " << std::endl;
-        overallTime = mainTimer.getElapsedTimeInMilliSec();
-    }
-
+    /**********************main LOG section**********************/
+    if (printMainLogOn) {                                       //
+        *mainLOG << "calculating energy levels: " << std::endl; //
+        overallTime = mainTimer.getElapsedTimeInMilliSec();     //
+    }                                                           //
+    /************************************************************/
     for (Int n = 1; n <= nMax; n++) {
         for (Int l = 0; l < n; ++l) {
             if (!calculatedLevel[n][l]) {
-                if (printMainLogOn) {
-                    printer.printString((*mainLOG), "n",         10, left);
-                    printer.printString((*mainLOG), "l",         10, left);
-                    printer.printString((*mainLOG), "nStep",     10, left);
-                    printer.printString((*mainLOG), "Ynl_left",  20, left);
-                    printer.printString((*mainLOG), "Ynl_right", 20, left);
-                    printer.printString((*mainLOG), "Ynl",       20, left);
-                    printer.printString((*mainLOG), "Scalc",     20, left);
-                    printer.printString((*mainLOG), "rp1",       20, left);
-                    printer.printString((*mainLOG), "rp2",       20, left);
-                    printer.printString((*mainLOG), "error",     20, left);
-                    printer.printString((*mainLOG), "time[ms]",  20, left);
-                    (*mainLOG) << std::endl;
-                    printer.printString((*mainLOG), "",  190, left, '-');
-                    (*mainLOG) << std::endl;
-                }
+                /**********************main LOG section**********************/
+                if (printMainLogOn) {                                       //
+                    printer.printString((*mainLOG), "n",         10, left); //
+                    printer.printString((*mainLOG), "l",         10, left); //
+                    printer.printString((*mainLOG), "nStep",     10, left); //
+                    printer.printString((*mainLOG), "Ynl_left",  20, left); //
+                    printer.printString((*mainLOG), "Ynl_right", 20, left); //
+                    printer.printString((*mainLOG), "Ynl",       20, left); //
+                    printer.printString((*mainLOG), "Scalc",     20, left); //
+                    printer.printString((*mainLOG), "rp1",       20, left); //
+                    printer.printString((*mainLOG), "rp2",       20, left); //
+                    printer.printString((*mainLOG), "error",     20, left); //
+                    printer.printString((*mainLOG), "time[ms]",  20, left); // 
+                    (*mainLOG) << std::endl;                                //
+                    printer.printString((*mainLOG), "",  190, left, '-');   //
+                    (*mainLOG) << std::endl;                                //
+                }                                                           //
+                /************************************************************/
                 calculateEnergyLevel(n, l);
             }
         }
     }
-
-    if (printMainLogOn) {
-        *mainLOG << "finished calculating energy levels, overall time: ";
-        overallTime = mainTimer.getElapsedTimeInMilliSec() - overallTime;
-        *mainLOG << overallTime << std::endl;
-    }    
+    /**********************main LOG section********************************/
+    if (printMainLogOn) {                                                 //
+        *mainLOG << "finished calculating energy levels, overall time: "; //
+        overallTime = mainTimer.getElapsedTimeInMilliSec() - overallTime; //
+        *mainLOG << overallTime << std::endl;                             //
+    }                                                                     //
+    /**********************************************************************/
 }
 
 void FTTFelectronicStates::calculateNlow(Double BE) {
     Double Nhalf = 0;
     Double Nn;
     Double Nnl;
-
 
     for (Int n = 1; n <= nMax; ++n) {
         Nn = 0;
@@ -1199,12 +1234,13 @@ void FTTFelectronicStates::calculateNlow(Double BE) {
     }
     NlowVal = Nhalf * 2;
     calculated_Nlow = true;
-
-    if (printMainLogOn) {
-        *mainLOG << "Calculating exact number of electronic states below bound energy: "
-                 << std::endl;
-        *mainLOG << "Nlow = " << NlowVal << std::endl;
-    }
+    /*************************************main LOG section********************************/
+    if (printMainLogOn) {                                                                //
+        *mainLOG << "Calculating exact number of electronic states below bound energy: " //
+                 << std::endl;                                                           //
+        *mainLOG << "Nlow = " << NlowVal << std::endl;                                   //
+    }                                                                                    //
+    /*************************************************************************************/
 }
 
 void FTTFelectronicStates::calculateNTFlow(Double BE) {
@@ -1224,11 +1260,12 @@ void FTTFelectronicStates::calculateNTFlow(Double BE) {
 
     NTFlowVal = result * 3.0 * T()*V()*sqrt(2.0 * T()) / M_PI / M_PI;
     calculated_NTFlow = true;
-
-    if (printMainLogOn) {
-        *mainLOG << "Thomas-Fermi states below bound energy:" << std::endl;
-        *mainLOG << "NTFlow = " << NTFlowVal << std::endl;
-    }
+    /*************************main LOG section*******************************/
+    if (printMainLogOn) {                                                   //
+        *mainLOG << "Thomas-Fermi states below bound energy:" << std::endl; //
+        *mainLOG << "NTFlow = " << NTFlowVal << std::endl;                  //
+    }                                                                       //
+    /************************************************************************/
 }
 
 void FTTFelectronicStates::calculateNTFfull() {
@@ -1247,11 +1284,12 @@ void FTTFelectronicStates::calculateNTFfull() {
 
     NTFfullVal = result * 3.0 * T()*V()*sqrt(2.0 * T()) / M_PI / M_PI;
     calculated_NTFfull = true;
-
-    if (printMainLogOn) {
-        *mainLOG << "Full Thomas-Fermi states:" << std::endl;
-        *mainLOG << "NTFfull = " << NTFfullVal << std::endl;
-    }
+    /*************************main LOG section*****************/
+    if (printMainLogOn) {                                     //
+        *mainLOG << "Full Thomas-Fermi states:" << std::endl; //
+        *mainLOG << "NTFfull = " << NTFfullVal << std::endl;  //
+    }                                                         //
+    /**********************************************************/
 }
 
 Double FTTFelectronicStates::pseudoStates(Double energy) {
