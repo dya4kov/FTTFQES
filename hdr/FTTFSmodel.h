@@ -18,7 +18,7 @@
 #include <fstream>
 #include <stdlib.h>
 
-#define DEFAULT_INPUT_FILE "in/FTTFSinput.dat"
+#define DEFAULT_INPUT_FILE "FTTFSinput.dat"
 #define DEFAULT_OUTPUT_FILE "FTTFSoutput.dat"
 
 class FTTFSmodel {
@@ -35,6 +35,10 @@ public:
 	* @brief Set tolerance eps for the further calculations. Default is @f$ 10^{-6} @f$.
 	*/
     void setTolerance(const Double eps);
+    /**
+	* @brief Set maximum n quantum number for calculating energy levels. Default is 6.
+	*/
+    void setLevelsNumber(const Int n);
     /**
 	* @brief Set temperature and volume/density/concentration range for calculation.
 	* @details Examples:
@@ -135,7 +139,7 @@ public:
     		dydx[0] = y[1];
 		    if (x > 0) {
 		        dydx[1] = a*x*FDhalf(y[0] / x);
-		        dydx[2] = -x*y[0] * FDmhalf(y[0] / x);
+		        dydx[2] = -x*y[0]*FDmhalf(y[0] / x);
 		    }
 		    else {
 		        dydx[1] = 1e+10;
@@ -252,7 +256,7 @@ FTTFSmodel::FTTFSmodel(Double _Z, Double _Mass) :
 	CPIntData(-1), // save all steps
 	CPIntSolver(1e-6, 0.0),
 	rhsCPInt(0.0),
-	eStates(7) {
+	eStates(6) {
 		varName[0] = "T"; varName[1] = "V"; varName[2] = "D"; varName[3] = "C";  
 		inputVarBound = 4; 
 		varName[4] = "LDP"; varName[5] = "LDE"; varName[6] = "LDM";
@@ -268,6 +272,7 @@ FTTFSmodel::FTTFSmodel(Double _Z, Double _Mass) :
 		precision = static_cast<int>(-log10(eps));
 		CPIntSolver.SetOutput(energyIntData);
 		energyIntSolver.SetOutput(CPIntData);
+		eStates.setEnergyRange(-4e+3, 1e+2);
 		pointLOG = NULL;
 		mainLOG = NULL;
 		OUT = NULL;
@@ -322,6 +327,10 @@ void FTTFSmodel::setPrintMainLogOn() {
 void FTTFSmodel::setPrintMainLogOff() {
     if (!mainLogStreamIsSet) {
         if (printMainLogOn) {
+        	*mainLOG << "Log stops. Final time: ";
+        	*mainLOG << mainTimer.getElapsedTimeInMilliSec();
+        	*mainLOG << " [ms]" << std::endl;
+        	mainTimer.stop();
             printMainLogOn = false;
             if (mainLOG->is_open()) mainLOG->close();
             delete mainLOG;
@@ -373,8 +382,8 @@ void FTTFSmodel::setTolerance(const Double _eps) {
 	}
 	phi.setTolerance(eps);
 	eStates.setTolerance(eps);
-	CPIntSolver.SetTolerance(0.0, eps/10);
-	energyIntSolver.SetTolerance(0.0, eps/10);
+	CPIntSolver.SetTolerance(0.0, eps);
+	energyIntSolver.SetTolerance(0.0, eps);
 	if (printMainLogOn || mainLogStreamIsSet) {
 		phi.clearLogStream();
 	}
@@ -955,7 +964,7 @@ void FTTFSmodel::calculateLDM(Int v, Int t) {
 		*pointLOG << "Calculating linear shell correction to \\mu:" << std::endl;
 	}
     currentCPInt = (*(data["CPInt"]))[v*Tsize + t]();
-    currentLM =  currentDN/currentCPInt;
+    currentLM = -currentDN/currentCPInt;
     (*(data["LDM"]))[v*Tsize + t].setValue(currentLM);
 	calculated["LDM"]  = true;
 	if (printPointLogOn || pointLogStreamIsSet) {
@@ -1042,6 +1051,7 @@ void FTTFSmodel::calculateEnergyInt(Int v, Int t) {
 
 	if (printPointLogOn || pointLogStreamIsSet) {
 		Int size = energyIntData.Count();
+		*pointLOG << "Number of integration steps: " << size << std::endl;
         printer.printString((*pointLOG), "x");
         printer.printString((*pointLOG), "phi(x)");
         printer.printString((*pointLOG), "dphi(x)");
@@ -1139,8 +1149,8 @@ void FTTFSmodel::calculateNLDM(Int v, Int t) {
 	Double currentN;
 	Double MTF = phi(1);
 	Double exactN = Z;
-	Double leftM = -fabs(MTF * 2);
-	Double rightM = fabs(MTF * 3);
+	Double leftM = -fabs(MTF * 1.1);
+	Double rightM = fabs(MTF * 1.2);
 	Double centerM = 0;
 	Double currentNLM;
 	Double NLMtime;

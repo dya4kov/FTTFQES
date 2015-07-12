@@ -18,8 +18,8 @@
 #include <fstream>
 #include <stdlib.h>
 
-#define DEFAULT_INPUT_FILE "in/FTTFinput.dat" 
-#define DEFAULT_OUTPUT_FILE "out/FTTFoutput.dat" 
+#define DEFAULT_INPUT_FILE "FTTFinput.dat" 
+#define DEFAULT_OUTPUT_FILE "FTTFoutput.dat" 
 /**
 * @brief This class implements interface for Thomas-Fermi model.
 * @details The main formulas for calculation of thermodynamic quantities
@@ -411,6 +411,10 @@ void FTTF::setPrintMainLogOn() {
 void FTTF::setPrintMainLogOff() {
     if (!mainLogStreamIsSet) {
         if (printMainLogOn) {
+        	*mainLOG << "Log stops. Final time: ";
+        	*mainLOG << mainTimer.getElapsedTimeInMilliSec();
+        	*mainLOG << " [ms]" << std::endl;
+        	mainTimer.stop();
             printMainLogOn = false;
             if (mainLOG->is_open()) mainLOG->close();
             delete mainLOG;

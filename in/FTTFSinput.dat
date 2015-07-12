@@ -1,15 +1,15 @@
 # Lines starting from spaces or after '#' are ignored
 #========================================================================
-Al                          # element name (from PeriodicTable)
+Fe                          # element name (from PeriodicTable)
 #========================================================================
-D[g/cm^3,lin](1.0, 2.0, 2) # (V)olume/(D)ensity/(C)oncentration dataset: 
+D[g/cm^3,lin](5.6e-4, 2.0, 1) # (V)olume/(D)ensity/(C)oncentration dataset: 
                             # [unit,scale](from, to, number_of_points)
                             # units: V - cm^{3}, m^{3}, atm
                             #        D - g/cm^3, kg/m^3, atm
                             #        C - cm^{-3}, m^{-3}, atm
                             # scale: lin, log
 #========================================================================                  
-T[atm,lin](1.0, 2.0, 2)    # (T)emperature dataset:
+T[eV,log](0.3, 3.3, 15)    # (T)emperature dataset:
                             # [unit,scale](from, to, number_of_points)
                             # units: eV, K, atm (hartree)
 #========================================================================
@@ -25,6 +25,6 @@ T[atm,lin](1.0, 2.0, 2)    # (T)emperature dataset:
 # Chemical potential: LDM, NLDM - linear and nonlinear
 #     Available units: eV, atm
 #========================================================================
-D[g/cm^3] T[eV] LDP[GPa,lin] LDE LDM
+D[g/cm^3] V[atm] T[atm] NLDP[atm,lin] NLDE[atm]
 #========================================================================
-1e-7                        # relative tolerance
+1e-6                        # relative tolerance

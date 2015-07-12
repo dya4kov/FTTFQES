@@ -2,5 +2,4 @@
 out/*
 lib/*
 log/*
-*.h.bak
-*.pdf
+in/*

@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 	std::string output;
 	double tolerance;
 	std::cout << "reading input file: in/" + inputfile << std::endl;
-	readInput(inputfile, element, vol, temp, output, tolerance);
+	readInput("in/" + inputfile, element, vol, temp, output, tolerance);
 	PeriodicTable PT;
 	FTTFSmodel fttfs(PT[element].Z, PT[element].mass);
 	if (loglvl > 0) {

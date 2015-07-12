@@ -780,6 +780,7 @@ void FTTFelectronicStates::calculateRP2(Double eArg, Double lArg) {
             RP2Solver.SetTolerance(0.0, epsNew);
             RP2Solver.Integrate(rhsRP2, y0, rhsRP2.xUp, rhsRP2.xDown);
             error = abs(rhsRP2.xUp - rhsRP2.xDown);
+            if (nSteps > 100) break;
         }
         phi_rp2 = rhsRP2.phi_xDown;
         dphi_rp2 = rhsRP2.dphi_xDown;
@@ -872,6 +873,7 @@ void FTTFelectronicStates::calculateRP1(Double eArg, Double lArg) {
             RP1Solver.SetTolerance(0.0, epsNew);
             RP1Solver.Integrate(rhsRP1, y0, rhsRP1.xUp, rhsRP1.xDown);
             error = abs(rhsRP1.xUp - rhsRP1.xDown);
+            if (nSteps > 100) break;
         }
         rp1 = rhsRP1.xUp;
         /***********************level LOG section********************/

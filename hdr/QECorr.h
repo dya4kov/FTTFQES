@@ -18,8 +18,8 @@
 #include <fstream>
 #include <stdlib.h>
 
-#define DEFAULT_INPUT_FILE "in/FTTFQEinput.dat"
-#define DEFAULT_OUTPUT_FILE "out/FTTFQEoutput.dat"
+#define DEFAULT_INPUT_FILE "FTTFQEinput.dat"
+#define DEFAULT_OUTPUT_FILE "FTTFQEoutput.dat"
 /**
 * @brief This class implements interface for Thomas-Fermi model.
 * @details The main formulas for calculation of thermodynamic quantities
@@ -439,6 +439,10 @@ void QECorr::setPrintMainLogOn() {
 void QECorr::setPrintMainLogOff() {
     if (!mainLogStreamIsSet) {
         if (printMainLogOn) {
+        	*mainLOG << "Log stops. Final time: ";
+        	*mainLOG << mainTimer.getElapsedTimeInMilliSec();
+        	*mainLOG << " [ms]" << std::endl;
+        	mainTimer.stop();
             printMainLogOn = false;
             if (mainLOG->is_open()) mainLOG->close();
             delete mainLOG;
